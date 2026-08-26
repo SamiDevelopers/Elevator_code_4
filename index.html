@@ -1,0 +1,2137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>نظام إدارة العقار | Real Estate Management</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ['Segoe UI', 'Tahoma', 'Arial', 'sans-serif']
+                        },
+                        colors: {
+                            primary: {
+                                50: '#eff6ff',
+                                100: '#dbeafe',
+                                500: '#3b82f6',
+                                600: '#2563eb',
+                                700: '#1d4ed8',
+                                800: '#1e40af'
+                            },
+                            accent: {
+                                500: '#8b5cf6',
+                                600: '#7c3aed'
+                            }
+                        }
+                    }
+                }
+            };
+        </script>
+        <style>
+            @media print {
+                body * { visibility: hidden; }
+                .print-area, .print-area * { visibility: visible; }
+                .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+                .no-print { display: none !important; }
+                nav, aside, .sidebar, header.app-header { display: none !important; }
+            }
+            .nav-active {
+                background: linear-gradient(135deg, #2563eb, #7c3aed);
+                color: white;
+                box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+            }
+            .stat-card {
+                background: linear-gradient(135deg, var(--from), var(--to));
+            }
+            .floor-row {
+                min-height: 4.5rem;
+            }
+            .unit-cell {
+                transition: transform 0.15s, box-shadow 0.15s;
+            }
+            .unit-cell:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+            }
+            .scrollbar-thin::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            .scrollbar-thin::-webkit-scrollbar-thumb {
+                background: #cbd5e1;
+                border-radius: 3px;
+            }
+            input[type="number"]::-webkit-inner-spin-button {
+                opacity: 0.5;
+            }
+            .code-badge {
+                display: inline-block;
+                background: #e0f2fe;
+                color: #0c4a6e;
+                padding: 4px 10px;
+                margin: 2px;
+                border-radius: 999px;
+                font-family: ui-monospace, monospace;
+                font-size: 11px;
+                cursor: pointer;
+                border: 1px solid #7dd3fc;
+                transition: 0.15s;
+            }
+            .code-badge.inactive {
+                background: #fee2e2;
+                color: #991b1b;
+                text-decoration: line-through;
+                border-color: #fca5a5;
+            }
+            .code-badge:hover {
+                transform: scale(1.03);
+                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            }
+            .status-pill {
+                font-size: 11px;
+                padding: 2px 8px;
+                border-radius: 999px;
+                font-weight: 600;
+                display: inline-block;
+            }
+            .pill-owner {
+                background: #d1fae5;
+                color: #065f46;
+            }
+            .pill-tenant {
+                background: #fef3c7;
+                color: #92400e;
+            }
+            .pill-closed {
+                background: #e2e8f0;
+                color: #475569;
+            }
+            .pill-no-elev {
+                background: #f1f5f9;
+                color: #64748b;
+            }
+            .sync-status {
+                transition: all 0.3s;
+            }
+            .sync-status.synced {
+                background: #10b981;
+                color: white;
+            }
+            .sync-status.syncing {
+                background: #f59e0b;
+                color: white;
+                animation: pulse 1s infinite;
+            }
+            .sync-status.error {
+                background: #ef4444;
+                color: white;
+            }
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
+        </style>
+    </head>
+    <body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+        <div class="flex min-h-screen">
+            <aside class="no-print w-64 lg:w-72 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col fixed h-full z-40 shadow-2xl">
+                <div class="p-5 border-b border-slate-700">
+                    <h1 class="text-xl font-bold flex items-center gap-2">🏢 إدارة العقار</h1>
+                    <p id="buildingNameSidebar" class="text-slate-400 text-sm mt-1 truncate">عمارة سكنية</p>
+                </div>
+                <nav class="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin">
+                    <button data-section="dashboard" class="nav-btn w-full text-right px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-slate-700/50 transition nav-active">📊 لوحة التحكم</button>
+                    <button data-section="units" class="nav-btn w-full text-right px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-slate-700/50 transition">🏠 إدارة الوحدات</button>
+                    <button data-section="elevator" class="nav-btn w-full text-right px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-slate-700/50 transition">🔑 شفرات الأسانسير</button>
+                    <button data-section="financial" class="nav-btn w-full text-right px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-slate-700/50 transition">💰 العمليات المالية</button>
+                    <button data-section="reports" class="nav-btn w-full text-right px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-slate-700/50 transition">📋 التقارير والطباعة</button>
+                    <button data-section="settings" class="nav-btn w-full text-right px-4 py-3 rounded-xl flex items-center gap-3 hover:bg-slate-700/50 transition">⚙️ الإعدادات والنسخ</button>
+                </nav>
+                <div class="p-4 border-t border-slate-700 text-xs text-slate-500 flex justify-between items-center">
+                    <span>يعمل بدون إنترنت • LocalStorage</span>
+                    <span id="syncStatusBadge" class="sync-status px-2 py-1 rounded-full text-xs bg-slate-700 text-slate-300">⏳ جاهز</span>
+                </div>
+            </aside>
+            <main class="flex-1 mr-64 lg:mr-72 min-h-screen">
+                <header class="app-header no-print sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+                    <div>
+                        <h2 id="pageTitle" class="text-2xl font-bold text-slate-800">لوحة التحكم</h2>
+                        <p id="pageSubtitle" class="text-slate-500 text-sm">نظرة عامة على الوضع المالي</p>
+                    </div>
+                    <div class="text-left text-sm text-slate-500" id="currentDateDisplay"></div>
+                </header>
+                <div class="p-6 max-w-[1600px] mx-auto">
+                    <section id="section-dashboard" class="section-panel space-y-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                            <div class="stat-card rounded-2xl p-5 text-white shadow-lg" style="--from:#059669;--to:#10b981">
+                                <p class="text-white/80 text-sm">إجمالي المحصل</p>
+                                <p id="statCollected" class="text-3xl font-bold mt-1">0 ج.م</p>
+                            </div>
+                            <div class="stat-card rounded-2xl p-5 text-white shadow-lg" style="--from:#dc2626;--to:#f87171">
+                                <p class="text-white/80 text-sm">إجمالي المديونيات</p>
+                                <p id="statDebts" class="text-3xl font-bold mt-1">0 ج.م</p>
+                            </div>
+                            <div class="stat-card rounded-2xl p-5 text-white shadow-lg" style="--from:#2563eb;--to:#60a5fa">
+                                <p class="text-white/80 text-sm">صندوق العقار العام</p>
+                                <p id="statGeneralFund" class="text-3xl font-bold mt-1">0 ج.م</p>
+                            </div>
+                            <div class="stat-card rounded-2xl p-5 text-white shadow-lg" style="--from:#7c3aed;--to:#a78bfa">
+                                <p class="text-white/80 text-sm">صندوق الأسانسير</p>
+                                <p id="statElevatorFund" class="text-3xl font-bold mt-1">0 ج.م</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <h3 class="font-bold text-lg mb-4">📈 الدخل مقابل المصروفات (آخر 6 أشهر)</h3>
+                                <canvas id="chartIncomeExpense" height="220"></canvas>
+                            </div>
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <h3 class="font-bold text-lg mb-4">🧾 حالة التحصيل — الشهر الحالي</h3>
+                                <canvas id="chartPaymentStatus" height="220"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                            <h3 class="font-bold text-lg mb-3">⚡ ملخص سريع</h3>
+                            <div id="dashboardQuickSummary" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center"></div>
+                        </div>
+                    </section>
+                    <section id="section-units" class="section-panel hidden space-y-6">
+                        <div class="flex flex-wrap gap-3 justify-between items-center">
+                            <p class="text-slate-600">انقر على وحدة لعرض ملفها وتعديل بياناتها</p>
+                            <button id="btnAddUnit" class="no-print bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-xl font-medium shadow">➕ إضافة وحدة</button>
+                        </div>
+                        <div id="unitsGrid" class="space-y-3"></div>
+                    </section>
+                    <section id="section-elevator" class="section-panel hidden space-y-6">
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                            <div class="bg-white rounded-xl border p-3 text-center">
+                                <p class="text-xs text-slate-500">وحدات</p>
+                                <p id="elevStatUnits" class="text-xl font-bold">0</p>
+                            </div>
+                            <div class="bg-white rounded-xl border p-3 text-center">
+                                <p class="text-xs text-slate-500">شفرات مسجلة</p>
+                                <p id="elevStatCodes" class="text-xl font-bold">0</p>
+                            </div>
+                            <div class="bg-white rounded-xl border p-3 text-center">
+                                <p class="text-xs text-slate-500">نشطة</p>
+                                <p id="elevStatActive" class="text-xl font-bold text-emerald-600">0</p>
+                            </div>
+                            <div class="bg-white rounded-xl border p-3 text-center">
+                                <p class="text-xs text-slate-500">موقوفة</p>
+                                <p id="elevStatInactive" class="text-xl font-bold text-red-600">0</p>
+                            </div>
+                            <div class="bg-white rounded-xl border p-3 text-center">
+                                <p class="text-xs text-slate-500">بدون مصعد</p>
+                                <p id="elevStatNoElev" class="text-xl font-bold">0</p>
+                            </div>
+                            <div class="bg-white rounded-xl border p-3 text-center">
+                                <p class="text-xs text-slate-500">شقق مغلقة</p>
+                                <p id="elevStatClosed" class="text-xl font-bold">0</p>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
+                            <table class="w-full text-sm text-right min-w-[900px]">
+                                <thead class="bg-slate-800 text-white">
+                                    <tr>
+                                        <th class="p-3">م</th>
+                                        <th class="p-3">الدور</th>
+                                        <th class="p-3">الشقة</th>
+                                        <th class="p-3">الموقع</th>
+                                        <th class="p-3">الساكن</th>
+                                        <th class="p-3">الحالة</th>
+                                        <th class="p-3">المصعد</th>
+                                        <th class="p-3">عدد الشفرات</th>
+                                        <th class="p-3">الشفرات</th>
+                                        <th class="p-3">إجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="elevatorCodesBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section id="section-financial" class="section-panel hidden space-y-6">
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <h3 class="font-bold text-lg mb-4">💵 تسجيل دفعة شهرية</h3>
+                                <form id="formPayment" class="space-y-3">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">الوحدة</label>
+                                        <select id="payUnitId" required class="w-full border border-slate-300 rounded-lg px-3 py-2"></select>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 mb-1">الشهر</label>
+                                            <select id="payMonth" class="w-full border border-slate-300 rounded-lg px-3 py-2"></select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 mb-1">السنة</label>
+                                            <input type="number" id="payYear" class="w-full border border-slate-300 rounded-lg px-3 py-2" min="2020" max="2100"/>
+                                        </div>
+                                    </div>
+                                    <div id="payDueHint" class="text-sm bg-blue-50 text-blue-800 rounded-lg p-2"></div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">المبلغ المدفوع (ج.م)</label>
+                                        <input type="number" id="payAmount" step="0.01" min="0" required class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">طريقة الدفع</label>
+                                        <select id="payMethod" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                                            <option value="cash">كاش</option>
+                                            <option value="vodafone">فودافون كاش</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">ملاحظات (اختياري)</label>
+                                        <input type="text" id="payNote" class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    </div>
+                                    <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-medium">✅ تسجيل الدفعة</button>
+                                </form>
+                            </div>
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <h3 class="font-bold text-lg mb-4">📤 تسجيل مصروف</h3>
+                                <form id="formExpense" class="space-y-3">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">الصندوق</label>
+                                        <select id="expFund" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                                            <option value="general">صندوق العقار العام</option>
+                                            <option value="elevator">صندوق صيانة الأسانسير</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">التصنيف</label>
+                                        <select id="expCategory" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+                                            <option value="electricity">كهرباء عمومية</option>
+                                            <option value="cleaning">نظافة / أدوات</option>
+                                            <option value="repair">إصلاحات عامة</option>
+                                            <option value="elevator_contract">عقد صيانة أسانسير</option>
+                                            <option value="elevator_parts">قطع غيار أسانسير</option>
+                                            <option value="other">أخرى</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">المبلغ (ج.م)</label>
+                                        <input type="number" id="expAmount" step="0.01" min="0.01" required class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">التاريخ</label>
+                                        <input type="date" id="expDate" class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 mb-1">الوصف</label>
+                                        <input type="text" id="expDescription" required class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    </div>
+                                    <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl font-medium">📤 خصم من الصندوق</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <h3 class="font-bold text-lg mb-4">⚠️ إضافة مديونية يدوية</h3>
+                                <form id="formManualDebt" class="space-y-3">
+                                    <select id="debtUnitId" required class="w-full border border-slate-300 rounded-lg px-3 py-2"></select>
+                                    <input type="number" id="debtAmount" step="0.01" min="0.01" required placeholder="المبلغ" class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    <input type="text" id="debtReason" required placeholder="سبب المديونية" class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2.5 rounded-xl font-medium">➕ إضافة مديونية</button>
+                                </form>
+                            </div>
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <h3 class="font-bold text-lg mb-4">🛗 رسوم طوارئ للأسانسير</h3>
+                                <p class="text-sm text-slate-500 mb-3">تُوزَّع على وحدات مستخدمي الأسانسير فقط وتُضاف لصندوق الأسانسير عند التحصيل.</p>
+                                <form id="formElevatorLevy" class="space-y-3">
+                                    <input type="number" id="levyPerUnit" step="0.01" min="0.01" required placeholder="المبلغ لكل وحدة (ج.م)" class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    <input type="text" id="levyDescription" required placeholder="وصف الرسوم" class="w-full border border-slate-300 rounded-lg px-3 py-2"/>
+                                    <button type="submit" class="w-full bg-violet-600 hover:bg-violet-700 text-white py-2.5 rounded-xl font-medium">📢 فرض الرسوم على المستخدمين</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 overflow-x-auto">
+                            <h3 class="font-bold text-lg mb-4">📜 آخر العمليات</h3>
+                            <table class="w-full text-sm text-right">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th class="p-2">التاريخ</th>
+                                        <th class="p-2">النوع</th>
+                                        <th class="p-2">التفاصيل</th>
+                                        <th class="p-2">المبلغ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentTransactionsBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section id="section-reports" class="section-panel hidden space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
+                            <div class="bg-white rounded-2xl border p-5">
+                                <h3 class="font-bold mb-3">📄 تقرير وحدة سنوي</h3>
+                                <select id="reportUnitId" class="w-full border rounded-lg px-3 py-2 mb-3"></select>
+                                <input type="number" id="reportUnitYear" class="w-full border rounded-lg px-3 py-2 mb-3" placeholder="السنة"/>
+                                <button id="btnUnitReport" class="w-full bg-primary-600 text-white py-2 rounded-xl mb-2">عرض التقرير</button>
+                            </div>
+                            <div class="bg-white rounded-2xl border p-5">
+                                <h3 class="font-bold mb-3">🏗️ تقرير العمارة</h3>
+                                <select id="reportBuildingType" class="w-full border rounded-lg px-3 py-2 mb-3">
+                                    <option value="monthly">شهري</option>
+                                    <option value="annual">سنوي</option>
+                                </select>
+                                <select id="reportBuildingMonth" class="w-full border rounded-lg px-3 py-2 mb-3"></select>
+                                <input type="number" id="reportBuildingYear" class="w-full border rounded-lg px-3 py-2 mb-3"/>
+                                <button id="btnBuildingReport" class="w-full bg-primary-600 text-white py-2 rounded-xl mb-2">عرض التقرير</button>
+                            </div>
+                            <div class="bg-white rounded-2xl border p-5">
+                                <h3 class="font-bold mb-3">🧾 إيصال تحصيل</h3>
+                                <select id="receiptPaymentId" class="w-full border rounded-lg px-3 py-2 mb-3"></select>
+                                <button id="btnPrintReceipt" class="bg-emerald-600 text-white px-6 py-2 rounded-xl w-full">🖨️ طباعة الإيصال</button>
+                            </div>
+                        </div>
+                        <div class="flex gap-3 no-print flex-wrap">
+                            <button id="btnExportExcel" class="bg-green-700 text-white px-4 py-2 rounded-xl">📊 تصدير Excel (جميع البيانات)</button>
+                            <button id="btnExportPDFReport" class="bg-red-600 text-white px-4 py-2 rounded-xl">📄 تصدير التقرير PDF</button>
+                            <button id="btnSyncNow" class="bg-blue-600 text-white px-4 py-2 rounded-xl">🔄 مزامنة الآن</button>
+                            <button id="btnAutoSyncToggle" class="bg-indigo-600 text-white px-4 py-2 rounded-xl">⏱️ تفعيل المزامنة التلقائية</button>
+                        </div>
+                        <div id="reportOutput" class="print-area bg-white rounded-2xl border p-6 min-h-[200px]"></div>
+                    </section>
+                    <section id="section-settings" class="section-panel hidden space-y-6">
+                        <div class="bg-white rounded-2xl border p-5 max-w-xl">
+                            <h3 class="font-bold text-lg mb-4">🏢 بيانات العمارة</h3>
+                            <label class="block text-sm mb-1">اسم العمارة</label>
+                            <input type="text" id="settingsBuildingName" class="w-full border rounded-lg px-3 py-2 mb-4"/>
+                            <button id="btnSaveSettings" class="bg-primary-600 text-white px-4 py-2 rounded-xl">حفظ</button>
+                        </div>
+                        <div class="bg-white rounded-2xl border p-5 max-w-xl">
+                            <h3 class="font-bold text-lg mb-4">🔗 إعدادات المزامنة</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-sm mb-1">رابط JSON الخام (GitHub RAW)</label>
+                                    <input type="url" id="syncGithubUrl" placeholder="https://raw.githubusercontent.com/..." class="w-full border rounded-lg px-3 py-2"/>
+                                </div>
+                                <div>
+                                    <label class="block text-sm mb-1">رمز الوصول (GitHub Token) - اختياري</label>
+                                    <input type="password" id="syncGithubToken" placeholder="ghp_..." class="w-full border rounded-lg px-3 py-2"/>
+                                    <p class="text-xs text-slate-500 mt-1">يُستخدم للقراءة والكتابة. اتركه فارغاً للقراءة فقط.</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm mb-1">اسم المستودع (owner/repo)</label>
+                                    <input type="text" id="syncRepoName" placeholder="samidevelopers/Elevator_code_1" class="w-full border rounded-lg px-3 py-2"/>
+                                </div>
+                                <div>
+                                    <label class="block text-sm mb-1">مسار الملف (data.json)</label>
+                                    <input type="text" id="syncFilePath" value="data.json" class="w-full border rounded-lg px-3 py-2"/>
+                                </div>
+                                <div class="flex gap-3 flex-wrap">
+                                    <button id="btnSaveSyncSettings" class="bg-primary-600 text-white px-4 py-2 rounded-xl">💾 حفظ إعدادات المزامنة</button>
+                                    <button id="btnFetchFromGithub" class="bg-blue-600 text-white px-4 py-2 rounded-xl">📥 جلب البيانات من GitHub</button>
+                                    <button id="btnPushToGithub" class="bg-green-600 text-white px-4 py-2 rounded-xl">📤 رفع البيانات إلى GitHub</button>
+                                </div>
+                                <div id="syncLog" class="text-sm bg-slate-100 p-3 rounded-lg max-h-40 overflow-y-auto font-mono"></div>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl border p-5 max-w-xl">
+                            <h3 class="font-bold text-lg mb-4">💾 النسخ الاحتياطي</h3>
+                            <div class="flex flex-wrap gap-3">
+                                <button id="btnExportJson" class="bg-emerald-600 text-white px-4 py-2 rounded-xl">⬇️ تصدير JSON</button>
+                                <button id="btnExportExcelBackup" class="bg-green-600 text-white px-4 py-2 rounded-xl">📊 تصدير Excel (نسخة)</button>
+                                <label class="bg-blue-600 text-white px-4 py-2 rounded-xl cursor-pointer">
+                                    ⬆️ استيراد JSON
+                                    <input type="file" id="importJsonFile" accept=".json" class="hidden"/>
+                                </label>
+                                <button id="btnResetData" class="bg-red-600 text-white px-4 py-2 rounded-xl">🔄 تحميل بيانات يناير 2026</button>
+                            </div>
+                            <p class="text-sm text-slate-500 mt-3">يُحفظ كل شيء في المتصفح محلياً — صدّر نسخة احتياطية بانتظام.</p>
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+        <!-- Modals remain the same as original -->
+        <div id="unitModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4 no-print">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
+                <div class="flex justify-between items-start mb-4">
+                    <h3 id="unitModalTitle" class="text-xl font-bold">ملف الوحدة</h3>
+                    <button id="unitModalClose" class="text-2xl text-slate-400 hover:text-slate-600">&times;</button>
+                </div>
+                <form id="formUnitEdit" class="space-y-3">
+                    <input type="hidden" id="editUnitId"/>
+                    <div>
+                        <label class="text-sm font-medium">اسم الوحدة</label>
+                        <input type="text" id="editUnitName" class="w-full border rounded-lg px-3 py-2" required/>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-sm font-medium">الدور</label>
+                            <input type="number" id="editUnitFloor" class="w-full border rounded-lg px-3 py-2"/>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">نوع الوحدة</label>
+                            <select id="editUnitType" class="w-full border rounded-lg px-3 py-2">
+                                <option value="apartment">شقة</option>
+                                <option value="basement">بدروم</option>
+                                <option value="office">مكتب</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">فئة الاشتراك</label>
+                        <select id="editUnitCategory" class="w-full border rounded-lg px-3 py-2">
+                            <option value="owner_elevator">مالك + أسانسير (170)</option>
+                            <option value="owner_no_elevator">مالك بدون أسانسير (150)</option>
+                            <option value="tenant">مستأجر (220)</option>
+                            <option value="closed">مغلقة (0 أو رسوم إدارية)</option>
+                        </select>
+                    </div>
+                    <div id="customFeeWrap" class="hidden">
+                        <label class="text-sm font-medium">رسوم إدارية مخصصة (ج.م)</label>
+                        <input type="number" id="editCustomFee" step="0.01" min="0" class="w-full border rounded-lg px-3 py-2" value="0"/>
+                    </div>
+                    <p id="editUnitDuePreview" class="text-sm bg-slate-100 rounded-lg p-2"></p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-sm font-medium">اسم الساكن</label>
+                            <input type="text" id="editResidentName" class="w-full border rounded-lg px-3 py-2"/>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">رقم الشقة</label>
+                            <input type="text" id="editAptNum" class="w-full border rounded-lg px-3 py-2"/>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-sm font-medium">مكان الشقة</label>
+                            <input type="text" id="editLocation" class="w-full border rounded-lg px-3 py-2"/>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">حالة الشقة</label>
+                            <select id="editApartmentStatus" class="w-full border rounded-lg px-3 py-2">
+                                <option value="occupied">ساكنة</option>
+                                <option value="closed">مغلقة</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">استخدام الأسانسير</label>
+                        <select id="editUseElevator" class="w-full border rounded-lg px-3 py-2">
+                            <option value="auto">تلقائي حسب الفئة</option>
+                            <option value="yes">نعم — يستخدم</option>
+                            <option value="no">لا — لا يستخدم</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">ملاحظات</label>
+                        <input type="text" id="editUnitNotes" class="w-full border rounded-lg px-3 py-2"/>
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-xl">حفظ</button>
+                        <button type="button" id="btnDeleteUnit" class="bg-red-100 text-red-700 px-4 py-2 rounded-xl hidden">🗑️ حذف</button>
+                    </div>
+                </form>
+                <div id="unitModalDebts" class="mt-4 border-t pt-4">
+                    <h4 class="font-bold mb-2">💰 المديونيات</h4>
+                    <div id="debtsList"></div>
+                </div>
+            </div>
+        </div>
+        <div id="editDebtModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4 no-print">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <h3 class="text-xl font-bold mb-4">✏️ تعديل المديونية</h3>
+                <input type="hidden" id="editDebtId"/>
+                <input type="hidden" id="editDebtUnitId"/>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-sm font-medium">السبب</label>
+                        <input type="text" id="editDebtReason" class="w-full border rounded-lg px-3 py-2"/>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">المبلغ المتبقي (ج.م)</label>
+                        <input type="number" id="editDebtRemaining" step="0.01" min="0" class="w-full border rounded-lg px-3 py-2"/>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">المبلغ الأصلي (ج.م)</label>
+                        <input type="number" id="editDebtOriginal" step="0.01" min="0" class="w-full border rounded-lg px-3 py-2"/>
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-4">
+                    <button type="button" id="editDebtSave" class="flex-1 bg-primary-600 text-white py-2 rounded-xl">💾 حفظ</button>
+                    <button type="button" id="editDebtDelete" class="flex-1 bg-red-600 text-white py-2 rounded-xl">🗑️ حذف</button>
+                    <button type="button" id="editDebtCancel" class="flex-1 border py-2 rounded-xl">إلغاء</button>
+                </div>
+            </div>
+        </div>
+        <div id="addUnitModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4 no-print">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <h3 class="text-xl font-bold mb-4">➕ وحدة جديدة</h3>
+                <form id="formAddUnit" class="space-y-3">
+                    <input type="text" id="newUnitName" placeholder="اسم الوحدة" required class="w-full border rounded-lg px-3 py-2"/>
+                    <input type="number" id="newUnitFloor" placeholder="الدور" class="w-full border rounded-lg px-3 py-2"/>
+                    <select id="newUnitType" class="w-full border rounded-lg px-3 py-2">
+                        <option value="apartment">شقة</option>
+                        <option value="basement">بدروم</option>
+                        <option value="office">مكتب</option>
+                    </select>
+                    <select id="newUnitCategory" class="w-full border rounded-lg px-3 py-2">
+                        <option value="owner_elevator">مالك + أسانسير</option>
+                        <option value="owner_no_elevator">مالك بدون أسانسير</option>
+                        <option value="tenant">مستأجر</option>
+                        <option value="closed">مغلقة</option>
+                    </select>
+                    <div class="flex gap-2">
+                        <button type="submit" class="flex-1 bg-primary-600 text-white py-2 rounded-xl">إضافة</button>
+                        <button type="button" id="addUnitModalClose" class="px-4 py-2 border rounded-xl">إلغاء</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div id="elevEditModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4 no-print">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <h3 class="text-xl font-bold mb-4">✏️ تعديل بيانات الساكن والشقة</h3>
+                <input type="hidden" id="elevEditUnitId"/>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-sm font-medium">اسم الساكن</label>
+                        <input type="text" id="elevEditName" class="w-full border rounded-lg px-3 py-2"/>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">فئة الاشتراك</label>
+                        <select id="elevEditCategory" class="w-full border rounded-lg px-3 py-2">
+                            <option value="owner_elevator">مالك + أسانسير (170)</option>
+                            <option value="owner_no_elevator">مالك بدون أسانسير (150)</option>
+                            <option value="tenant">مستأجر (220)</option>
+                            <option value="closed">مغلقة</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">حالة الشقة</label>
+                        <select id="elevEditAptStatus" class="w-full border rounded-lg px-3 py-2">
+                            <option value="occupied">ساكنة</option>
+                            <option value="closed">مغلقة</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">استخدام الأسانسير</label>
+                        <select id="elevEditUseElevator" class="w-full border rounded-lg px-3 py-2">
+                            <option value="yes">نعم</option>
+                            <option value="no">لا</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-4">
+                    <button type="button" id="elevEditCancel" class="flex-1 border py-2 rounded-xl">إلغاء</button>
+                    <button type="button" id="elevEditSave" class="flex-1 bg-primary-600 text-white py-2 rounded-xl">حفظ</button>
+                </div>
+            </div>
+        </div>
+        <div id="elevCodeModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4 no-print">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <h3 class="text-xl font-bold mb-4">➕ شفرة أسانسير جديدة</h3>
+                <input type="hidden" id="elevCodeUnitId"/>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-sm font-medium">رقم الشفرة</label>
+                        <input type="text" id="elevNewCode" maxlength="20" class="w-full border rounded-lg px-3 py-2 font-mono"/>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">الحالة</label>
+                        <select id="elevNewCodeStatus" class="w-full border rounded-lg px-3 py-2">
+                            <option value="active">نشطة</option>
+                            <option value="inactive">موقوفة</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-4">
+                    <button type="button" id="elevCodeCancel" class="flex-1 border py-2 rounded-xl">إلغاء</button>
+                    <button type="button" id="elevCodeSave" class="flex-1 bg-emerald-600 text-white py-2 rounded-xl">حفظ</button>
+                </div>
+            </div>
+        </div>
+        <div id="toast" class="fixed bottom-6 left-6 z-[60] hidden bg-slate-900 text-white px-5 py-3 rounded-xl shadow-lg"></div>
+        <script>
+            (function() {
+                'use strict';
+
+                const STORAGE_KEY = 'rem_building_v2';
+                const SYNC_CONFIG_KEY = 'rem_sync_config';
+                const SEED_VERSION = 2;
+                const MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+                const CATEGORY_LABELS = {
+                    owner_elevator: 'مالك + أسانسير',
+                    owner_no_elevator: 'مالك بدون أسانسير',
+                    tenant: 'مستأجر',
+                    closed: 'مغلقة'
+                };
+                const TYPE_LABELS = {
+                    apartment: 'شقة',
+                    basement: 'بدروم',
+                    office: 'مكتب'
+                };
+                const TYPE_EMOJI = {
+                    apartment: '🏠',
+                    basement: '🔻',
+                    office: '🏢'
+                };
+
+                const PRICING = {
+                    owner_elevator: { total: 170, general: 150, elevator: 20, usesElevator: true },
+                    owner_no_elevator: { total: 150, general: 150, elevator: 0, usesElevator: false },
+                    tenant: { total: 220, general: 200, elevator: 20, usesElevator: true },
+                    closed: { total: 0, general: 0, elevator: 0, usesElevator: false }
+                };
+
+                let state = null;
+                let syncConfig = null;
+                let chartIncome = null;
+                let chartStatus = null;
+                let autoSyncInterval = null;
+                let isSyncing = false;
+                let syncLogs = [];
+
+                function uid() {
+                    return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+                }
+                
+                function formatMoney(n) {
+                    const v = Number(n) || 0;
+                    return v.toLocaleString('ar-EG', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' ج.م';
+                }
+                
+                function toast(msg, isError) {
+                    const el = document.getElementById('toast');
+                    el.textContent = msg;
+                    el.className = 'fixed bottom-6 left-6 z-[60] px-5 py-3 rounded-xl shadow-lg ' + (isError ? 'bg-red-600' : 'bg-slate-900');
+                    el.classList.remove('hidden');
+                    setTimeout(() => el.classList.add('hidden'), 3200);
+                }
+                
+                function todayISO() {
+                    return new Date().toISOString().slice(0, 10);
+                }
+                
+                function saveState() {
+                    try {
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                    } catch (e) {
+                        toast('فشل الحفظ المحلي', true);
+                    }
+                }
+
+                function loadState() {
+                    try {
+                        const raw = localStorage.getItem(STORAGE_KEY);
+                        if (raw) return JSON.parse(raw);
+                    } catch (e) {}
+                    return null;
+                }
+
+                function loadSyncConfig() {
+                    try {
+                        const raw = localStorage.getItem(SYNC_CONFIG_KEY);
+                        if (raw) {
+                            syncConfig = JSON.parse(raw);
+                            return;
+                        }
+                    } catch (e) {}
+                    syncConfig = {
+                        githubUrl: '',
+                        githubToken: '',
+                        repoName: '',
+                        filePath: 'data.json',
+                        autoSync: false,
+                        autoSyncInterval: 300000 // 5 minutes
+                    };
+                }
+
+                function saveSyncConfig() {
+                    try {
+                        localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(syncConfig));
+                    } catch (e) {
+                        toast('فشل حفظ إعدادات المزامنة', true);
+                    }
+                }
+
+                function addSyncLog(msg, type) {
+                    const timestamp = new Date().toLocaleTimeString('ar-EG');
+                    syncLogs.unshift({ time: timestamp, msg, type: type || 'info' });
+                    if (syncLogs.length > 100) syncLogs.pop();
+                    updateSyncLogDisplay();
+                }
+
+                function updateSyncLogDisplay() {
+                    const el = document.getElementById('syncLog');
+                    if (el) {
+                        el.innerHTML = syncLogs.slice(0, 50).map(log => {
+                            const colors = {
+                                info: 'text-blue-600',
+                                success: 'text-green-600',
+                                error: 'text-red-600',
+                                warning: 'text-amber-600'
+                            };
+                            return `<div class="${colors[log.type] || 'text-slate-600'}">[${log.time}] ${log.msg}</div>`;
+                        }).join('');
+                    }
+                }
+
+                function updateSyncBadge(status, message) {
+                    const badge = document.getElementById('syncStatusBadge');
+                    if (!badge) return;
+                    const statusMap = {
+                        ready: { class: 'bg-slate-700 text-slate-300', text: '⏳ جاهز' },
+                        synced: { class: 'bg-emerald-600 text-white', text: '✅ متزامن' },
+                        syncing: { class: 'bg-amber-600 text-white', text: '🔄 جاري المزامنة...' },
+                        error: { class: 'bg-red-600 text-white', text: '❌ خطأ' }
+                    };
+                    const s = statusMap[status] || statusMap.ready;
+                    badge.className = `sync-status px-2 py-1 rounded-full text-xs ${s.class}`;
+                    badge.textContent = s.text;
+                    if (message) badge.title = message;
+                }
+
+                // ---- Original data functions (unchanged) ----
+                function U(id, sort, fl, flLabel, apt, loc, res, aptSt, cat, type, useEl, notes, codes) {
+                    return {
+                        id, sortOrder: sort, floor: fl, floorLabel: flLabel, aptNum: String(apt),
+                        location: loc || '', name: (apt === '0' || apt === 0 ? 'البدروم' : 'شقة ' + apt) + ' — ' + flLabel,
+                        residentName: res, apartmentStatus: aptSt, category: cat, type: type || 'apartment',
+                        useElevator: useEl, notes: notes || '', elevatorCodes: codes || [], customFee: 0
+                    };
+                }
+
+                function createProductionUnits() {
+                    const c = (code) => ({ code: String(code), status: 'active' });
+                    return [U('u_101', 1, 1, 'الأول', '101', 'يمين السلم', 'أ - عبد المجيد سلطان', 'closed', 'closed', 'apartment', false, '', []),
+                        U('u_102', 2, 1, 'الأول', '102', 'يسار السلم', 'أ - رضا وهيب', 'occupied', 'owner_no_elevator', 'apartment', false, '', []),
+                        U('u_201', 3, 2, 'الثاني', '201', 'يمين السلم', 'أ - ماجد محمد سامي', 'occupied', 'owner_no_elevator', 'apartment', false, '', []),
+                        U('u_202', 4, 2, 'الثاني', '202', 'يسار السلم', 'احمد شعبان فتحي', 'occupied', 'tenant', 'apartment', false, '', []),
+                        U('u_301', 5, 3, 'الثالث', '301', 'يمين السلم', 'أ- سيدة علي', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0003718769'), c('0004241743'), c('0003813056'), c('0003896078'), c('0003887737')]),
+                        U('u_302', 6, 3, 'الثالث', '302', 'يسار السلم', 'أ - مرتضي', 'occupied', 'tenant', 'apartment', true, '', [c('0003883215'), c('0013808119')]),
+                        U('u_401', 7, 4, 'الرابع', '401', 'يمين السلم', 'أ - فادي سمير', 'occupied', 'tenant', 'apartment', true, '', [c('0013630411'), c('0013543250'), c('0001112644'), c('0000242148'), c('0000426301')]),
+                        U('u_402', 8, 4, 'الرابع', '402', 'يسار السلم', 'أ - منتصر احمد علي', 'occupied', 'tenant', 'apartment', true, '', [c('0013594203'), c('0013623543'), c('0000674223'), c('0001184484'), c('0003892669')]),
+                        U('u_501', 9, 5, 'الخامس', '501', 'يمين السلم', 'أ - عاطف رزق', 'closed', 'closed', 'apartment', false, '', []),
+                        U('u_502', 10, 5, 'الخامس', '502', 'يسار السلم', 'الحاج محمد عبد المنعم', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0013620969'), c('0000998632'), c('0000936692'), c('0013567037')]),
+                        U('u_601', 11, 6, 'السادس', '601', 'يمين السلم', 'أ - فادي راشد', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0013629835'), c('0013596113')]),
+                        U('u_602', 12, 6, 'السادس', '602', 'يسار السلم', 'أ - محمد يوسف', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0013634019'), c('0013655960'), c('0013592667')]),
+                        U('u_701', 13, 7, 'السابع', '701', 'يمين السلم', 'أ - محمد محسن', 'occupied', 'tenant', 'apartment', true, '', [c('0000937473'), c('0000956467'), c('0004220241'), c('0003881684'), c('0013145196'), c('0013765574'), c('0007978812'), c('0003963663')]),
+                        U('u_702', 14, 7, 'السابع', '702', 'يسار السلم', 'أ - خالد جمال', 'closed', 'tenant', 'apartment', true, '', [c('0013815319'), c('0013795969'), c('0013820196'), c('0007069509')]),
+                        U('u_801', 15, 8, 'الثامن', '801', 'يمين السلم', 'أ - محمد السيد', 'occupied', 'tenant', 'apartment', true, '', [c('0013660068'), c('0013587154'), c('0001086584'), c('0001081956'), c('0012604425'), c('0012558520'), c('0006433908')]),
+                        U('u_802', 16, 8, 'الثامن', '802', 'يسار السلم', 'أ - عبد المعطى', 'closed', 'closed', 'apartment', false, '', []),
+                        U('u_901', 17, 9, 'التاسع', '901', 'يمين السلم', 'أ - جمعة فراج', 'closed', 'closed', 'apartment', false, '', []),
+                        U('u_902', 18, 9, 'التاسع', '902', 'يسار السلم', 'أ - سلامة ماضي', 'occupied', 'tenant', 'apartment', true, '', [c('0000959304'), c('0000978230')]),
+                        U('u_1001', 19, 10, 'العاشر', '1001', 'يمين السلم', 'أ - احمد سعيد', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0013598142'), c('0013655203'), c('0013577035'), c('0000955089')]),
+                        U('u_1002', 20, 10, 'العاشر', '1002', 'يسار السلم', 'أ - عاطف عبد العزيز', 'occupied', 'tenant', 'apartment', true, '', [c('0013558246'), c('0013535294'), c('0003922290')]),
+                        U('u_1101', 21, 11, 'الحادي عشر', '1101', 'يمين السلم', 'م . ماجدة حبيب', 'closed', 'closed', 'apartment', false, '', [c('0013621386')]),
+                        U('u_1102', 22, 11, 'الحادي عشر', '1102', 'يسار السلم', 'م . رانيا رمزي', 'occupied', 'tenant', 'apartment', true, '', [c('0013658022'), c('0013663583')]),
+                        U('u_1201', 23, 12, 'الثاني عشر', '1201', 'يمين السلم', 'أ - مشيل انطونيوس', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0013647677'), c('0013517167'), c('0003878575')]),
+                        U('u_1202', 24, 12, 'الثاني عشر', '1202', 'يسار السلم', 'أ - محمد جمال احمد', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0013549294'), c('0013644461'), c('0000971992')]),
+                        U('u_1301', 25, 13, 'الثالث عشر', '1301', 'يمين السلم', 'م . جورجيت حبيب', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0000986709'), c('0013621358')]),
+                        U('u_1302', 26, 13, 'الثالث عشر', '1302', 'يسار السلم', 'د. سامي عادل', 'occupied', 'owner_elevator', 'apartment', true, '', [c('0013519579'), c('0013676840')]),
+                        U('u_b0', 0, 0, 'البدروم', '0', '', 'أ - فرج ميخائيل', 'closed', 'closed', 'basement', false, '', [])
+                    ].sort((a, b) => (a.floor || 0) - (b.floor || 0));
+                }
+
+                function seedPayment(unitId, amount, method, note, units) {
+                    const unit = units.find(u => u.id === unitId);
+                    const due = unit.category === 'closed' ? 0 : (unit.category === 'owner_elevator' ? 170 : unit.category === 'owner_no_elevator' ? 150 : 220);
+                    const p = unit.category === 'owner_elevator' ? { g: 150, e: 20 } : unit.category === 'owner_no_elevator' ? { g: 150, e: 0 } : { g: 200, e: 20 };
+                    const ratio = due > 0 ? amount / due : 1;
+                    return {
+                        id: 'p_' + unitId + '_202601', unitId, month: 1, year: 2026, amount, method,
+                        note: note || '', date: '2026-01-31',
+                        generalAmount: Math.round(p.g * ratio * 100) / 100,
+                        elevatorAmount: Math.round(p.e * ratio * 100) / 100,
+                        expectedAtTime: due, createdAt: '2026-01-31T12:00:00.000Z'
+                    };
+                }
+
+                function createProductionState() {
+                    const units = createProductionUnits();
+                    return {
+                        version: 2,
+                        settings: { buildingName: 'عمارة 13 دور', seedVersion: SEED_VERSION },
+                        units,
+                        payments: [
+                            seedPayment('u_102', 150, 'vodafone', '', units), seedPayment('u_201', 150, 'vodafone', '', units),
+                            seedPayment('u_202', 220, 'cash', '', units), seedPayment('u_301', 170, 'cash', '', units),
+                            seedPayment('u_302', 220, 'cash', '', units), seedPayment('u_401', 220, 'vodafone', '', units),
+                            seedPayment('u_402', 220, 'vodafone', '', units), seedPayment('u_502', 170, 'cash', '', units),
+                            seedPayment('u_601', 170, 'cash', '', units), seedPayment('u_602', 170, 'cash', '', units),
+                            seedPayment('u_701', 220, 'cash', '', units), seedPayment('u_801', 170, 'cash', 'دفع جزئي', units),
+                            seedPayment('u_902', 220, 'cash', '', units), seedPayment('u_1001', 170, 'vodafone', '', units),
+                            seedPayment('u_1002', 220, 'cash', '', units), seedPayment('u_1102', 220, 'cash', '', units),
+                            seedPayment('u_1201', 170, 'vodafone', '', units), seedPayment('u_1202', 170, 'vodafone', '', units),
+                            seedPayment('u_1301', 170, 'cash', '', units), seedPayment('u_1302', 170, 'cash', '', units)
+                        ],
+                        debts: [
+                            { id: 'd_702_jan', unitId: 'u_702', originalAmount: 220, remaining: 220,
+                              reason: 'متبقي رسم شهر يناير لسنة 2026', createdAt: '2026-01-31T12:00:00.000Z',
+                              meta: { type: 'auto_arrears', month: 1, year: 2026 } },
+                            { id: 'd_801_jan', unitId: 'u_801', originalAmount: 50, remaining: 50,
+                              reason: 'متبقي رسم شهر يناير لسنة 2026', createdAt: '2026-01-31T12:00:00.000Z',
+                              meta: { type: 'auto_arrears', month: 1, year: 2026 } }
+                        ],
+                        expenses: [
+                            { id: 'e1', fund: 'general', category: 'electricity', amount: 1235, date: '2026-01-10', description: 'كهرباء قيمة فاتورة', createdAt: '2026-01-10T12:00:00.000Z' },
+                            { id: 'e2', fund: 'elevator', category: 'elevator_contract', amount: 300, date: '2026-01-12', description: 'المصعد صيانة دورية', createdAt: '2026-01-12T12:00:00.000Z' },
+                            { id: 'e3', fund: 'general', category: 'repair', amount: 400, date: '2026-01-15', description: 'تركيب شرائط الأبواب', createdAt: '2026-01-15T12:00:00.000Z' },
+                            { id: 'e4', fund: 'elevator', category: 'other', amount: 30, date: '2026-01-16', description: 'شفرة البواب', createdAt: '2026-01-16T12:00:00.000Z' },
+                            { id: 'e5', fund: 'general', category: 'other', amount: 20, date: '2026-01-18', description: 'تصوير', createdAt: '2026-01-18T12:00:00.000Z' },
+                            { id: 'e6', fund: 'general', category: 'other', amount: 20, date: '2026-01-20', description: 'مصاريف كاش', createdAt: '2026-01-20T12:00:00.000Z' },
+                            { id: 'e7', fund: 'elevator', category: 'elevator_parts', amount: 100, date: '2026-01-22', description: 'صيانة لمبة الأسانسير', createdAt: '2026-01-22T12:00:00.000Z' }
+                        ],
+                        levies: [],
+                        doorman: { name: 'البواب', useElevator: true, codes: [{ code: '0013643565', status: 'active' }] }
+                    };
+                }
+
+                // ---- Core functions (shortened for brevity) ----
+                function ensureState() {
+                    state = loadState();
+                    const needSeed = !state || !state.settings || (state.settings.seedVersion || 0) < SEED_VERSION;
+                    if (needSeed) {
+                        state = createProductionState();
+                        saveState();
+                    }
+                    if (!state.payments) state.payments = [];
+                    if (!state.expenses) state.expenses = [];
+                    if (!state.debts) state.debts = [];
+                    if (!state.levies) state.levies = [];
+                    if (!state.settings) state.settings = { buildingName: 'عمارة سكنية' };
+                    state.debts.forEach(d => {
+                        if (d.remaining == null) d.remaining = d.originalAmount != null ? d.originalAmount : d.amount || 0;
+                        if (d.originalAmount == null) d.originalAmount = d.remaining;
+                    });
+                    migrateUnitFields();
+                    loadSyncConfig();
+                }
+
+                function getUnit(id) { return state.units.find(u => u.id === id); }
+                function getUnitMonthlyDue(unit) {
+                    if (!unit) return 0;
+                    if (unit.category === 'closed' && unit.apartmentStatus === 'closed') return Number(unit.customFee) || 0;
+                    const p = PRICING[unit.category];
+                    return p ? p.total : 0;
+                }
+                function unitUsesElevator(unit) {
+                    if (!unit) return false;
+                    if (unit.useElevator === false) return false;
+                    if (unit.useElevator === true) return true;
+                    if (unit.category === 'closed' && unit.apartmentStatus === 'closed') return false;
+                    const p = PRICING[unit.category];
+                    return p ? p.usesElevator : false;
+                }
+                function getUnitDisplayName(unit) {
+                    return unit.residentName ? `${unit.aptNum || unit.name} - ${unit.residentName}` : (unit.aptNum || unit.name);
+                }
+
+                function migrateUnitFields() {
+                    state.units.forEach(u => {
+                        if (!u.elevatorCodes) u.elevatorCodes = [];
+                        if (!u.apartmentStatus) u.apartmentStatus = u.category === 'closed' ? 'closed' : 'occupied';
+                        if (!u.residentName) u.residentName = u.name || '';
+                        if (!u.floorLabel) u.floorLabel = u.floor != null ? 'الدور ' + u.floor : '';
+                        if (!u.aptNum) u.aptNum = '';
+                    });
+                    if (!state.doorman) state.doorman = { name: 'البواب', useElevator: true, codes: [] };
+                }
+
+                function splitPaymentAmount(amount, unit) {
+                    const due = getUnitMonthlyDue(unit);
+                    if (due <= 0 || unit.category === 'closed') {
+                        const fee = Number(unit.customFee) || 0;
+                        if (fee <= 0) return { general: 0, elevator: 0 };
+                        return { general: amount, elevator: 0 };
+                    }
+                    const p = PRICING[unit.category];
+                    const ratio = amount / due;
+                    return { general: Math.round(p.general * ratio * 100) / 100, elevator: Math.round(p.elevator * ratio * 100) / 100 };
+                }
+
+                function getOpenDebtsForUnit(unitId) { return state.debts.filter(d => d.unitId === unitId && d.remaining > 0.001); }
+                function getTotalOpenDebt(unitId) { return getOpenDebtsForUnit(unitId).reduce((s, d) => s + d.remaining, 0); }
+                function getAllOpenDebtTotal() { return state.debts.reduce((s, d) => s + (d.remaining > 0 ? d.remaining : 0), 0); }
+                function getPaymentsForUnitMonth(unitId, month, year) { return state.payments.filter(p => p.unitId === unitId && p.month === month && p.year === year); }
+                function getPaidAmountForMonth(unitId, month, year) { return getPaymentsForUnitMonth(unitId, month, year).reduce((s, p) => s + p.amount, 0); }
+
+                function getExpectedForMonth(unitId, month, year) {
+                    const unit = getUnit(unitId);
+                    if (!unit) return 0;
+                    let expected = getUnitMonthlyDue(unit);
+                    state.levies.forEach(lev => {
+                        if (lev.month === month && lev.year === year && unitUsesElevator(unit)) expected += lev.perUnit;
+                    });
+                    return expected;
+                }
+
+                function getMonthStatus(unitId, month, year) {
+                    const expected = getExpectedForMonth(unitId, month, year);
+                    const paid = getPaidAmountForMonth(unitId, month, year);
+                    if (expected <= 0) return paid > 0 ? 'paid' : 'paid';
+                    if (paid >= expected - 0.01) return 'paid';
+                    if (paid > 0) return 'partial';
+                    return 'unpaid';
+                }
+
+                function computeFundBalances() {
+                    let general = 0, elevator = 0;
+                    state.payments.forEach(p => { general += p.generalAmount || 0; elevator += p.elevatorAmount || 0; });
+                    state.expenses.forEach(e => {
+                        if (e.fund === 'general') general -= e.amount;
+                        else elevator -= e.amount;
+                    });
+                    return { general: Math.round(general * 100) / 100, elevator: Math.round(elevator * 100) / 100 };
+                }
+
+                function getTotalCollected() { return state.payments.reduce((s, p) => s + p.amount, 0); }
+
+                function addDebt(unitId, amount, reason, meta) {
+                    state.debts.push({
+                        id: uid(), unitId, originalAmount: amount, remaining: amount, reason,
+                        createdAt: new Date().toISOString(), meta: meta || {}, paymentsApplied: []
+                    });
+                }
+
+                function updateDebt(debtId, newRemaining, newOriginal, newReason) {
+                    const debt = state.debts.find(d => d.id === debtId);
+                    if (debt) { debt.remaining = newRemaining; debt.originalAmount = newOriginal; debt.reason = newReason; saveState(); return true; }
+                    return false;
+                }
+
+                function deleteDebt(debtId) { state.debts = state.debts.filter(d => d.id !== debtId); saveState(); }
+
+                function applyDebtPaymentWithAllocation(unitId, amount, unit) {
+                    let left = amount, general = 0, elevator = 0;
+                    const debts = state.debts.filter(d => d.unitId === unitId && d.remaining > 0.001).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    for (const d of debts) {
+                        if (left <= 0.001) break;
+                        const pay = Math.min(left, d.remaining);
+                        d.remaining = Math.round((d.remaining - pay) * 100) / 100;
+                        if (d.meta && d.meta.type === 'elevator_levy') elevator += pay;
+                        else if (d.meta && d.meta.type === 'auto_arrears') {
+                            const sp = splitPaymentAmount(pay, unit);
+                            general += sp.general; elevator += sp.elevator;
+                        } else general += pay;
+                        left -= pay;
+                    }
+                    return { general, elevator, applied: amount - left };
+                }
+
+                function upsertAutoArrearsDebt(unitId, month, year, amount) {
+                    if (amount <= 0.001) return;
+                    const existing = state.debts.find(d => d.unitId === unitId && d.meta && d.meta.type === 'auto_arrears' &&
+                        d.meta.month === month && d.meta.year === year && d.remaining > 0.001);
+                    const monthName = MONTHS_AR[month - 1];
+                    const reason = 'متبقي رسم شهر ' + monthName + ' لسنة ' + year;
+                    if (existing) {
+                        existing.remaining = Math.round((existing.remaining + amount) * 100) / 100;
+                        existing.originalAmount = Math.round((existing.originalAmount + amount) * 100) / 100;
+                    } else addDebt(unitId, amount, reason, { type: 'auto_arrears', month, year });
+                }
+
+                function processPayment(data) {
+                    const unit = getUnit(data.unitId);
+                    if (!unit) throw new Error('وحدة غير موجودة');
+                    if (!data.amount || data.amount <= 0) throw new Error('المبلغ غير صالح');
+                    const month = data.month, year = data.year;
+                    const monthlyDue = getUnitMonthlyDue(unit);
+                    const expected = getExpectedForMonth(data.unitId, month, year);
+                    const paidSoFar = getPaidAmountForMonth(data.unitId, month, year);
+                    const remainingMonth = Math.max(0, Math.round((expected - paidSoFar) * 100) / 100);
+                    let levyPart = 0;
+                    state.levies.forEach(lev => {
+                        if (lev.month === month && lev.year === year && unitUsesElevator(unit)) levyPart += lev.perUnit;
+                    });
+                    const subPartExpected = Math.max(0, monthlyDue);
+                    const paidTowardSub = Math.min(paidSoFar, subPartExpected);
+                    const subRemaining = Math.max(0, Math.round((subPartExpected - paidTowardSub) * 100) / 100);
+                    const levyRemaining = Math.max(0, Math.round((remainingMonth - subRemaining) * 100) / 100);
+                    let cashLeft = data.amount, generalTotal = 0, elevatorTotal = 0;
+                    const toSub = Math.min(cashLeft, subRemaining);
+                    if (toSub > 0.001) {
+                        const sp = splitPaymentAmount(toSub, unit);
+                        generalTotal += sp.general; elevatorTotal += sp.elevator;
+                        cashLeft -= toSub;
+                        if (toSub < subRemaining - 0.01) upsertAutoArrearsDebt(data.unitId, month, year, Math.round((subRemaining - toSub) * 100) / 100);
+                    }
+                    const toLevy = Math.min(cashLeft, levyRemaining);
+                    if (toLevy > 0.001) { elevatorTotal += toLevy; cashLeft -= toLevy; }
+                    if (cashLeft > 0.001) {
+                        const debtAlloc = applyDebtPaymentWithAllocation(data.unitId, cashLeft, unit);
+                        generalTotal += debtAlloc.general; elevatorTotal += debtAlloc.elevator;
+                        cashLeft -= debtAlloc.applied;
+                    }
+                    const payment = {
+                        id: uid(), unitId: data.unitId, month, year, amount: data.amount,
+                        method: data.method, date: data.date || todayISO(), note: data.note || '',
+                        generalAmount: Math.round(generalTotal * 100) / 100,
+                        elevatorAmount: Math.round(elevatorTotal * 100) / 100,
+                        expectedAtTime: expected, createdAt: new Date().toISOString()
+                    };
+                    state.payments.push(payment);
+                    saveState();
+                    return { payment, extraToDebt: 0 };
+                }
+
+                // ---- GitHub Sync Functions ----
+                async function fetchFromGithub() {
+                    if (isSyncing) { addSyncLog('⚠️ مزامنة جارية بالفعل', 'warning'); return; }
+                    isSyncing = true;
+                    updateSyncBadge('syncing', 'جاري الجلب من GitHub...');
+                    addSyncLog('🔄 بدء جلب البيانات من GitHub...', 'info');
+
+                    try {
+                        const url = syncConfig.githubUrl || document.getElementById('syncGithubUrl').value;
+                        if (!url) {
+                            throw new Error('الرجاء إدخال رابط GitHub RAW');
+                        }
+                        const response = await fetch(url, {
+                            headers: syncConfig.githubToken ? { 'Authorization': `token ${syncConfig.githubToken}` } : {}
+                        });
+                        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        const data = await response.json();
+                        if (!data.units || !Array.isArray(data.units)) {
+                            throw new Error('بيانات غير صالحة: missing units array');
+                        }
+                        // Merge: keep local as master, but merge new units
+                        const localUnits = new Map(state.units.map(u => [u.id, u]));
+                        data.units.forEach(u => {
+                            if (!localUnits.has(u.id)) {
+                                state.units.push(u);
+                                addSyncLog(`➕ تم إضافة وحدة جديدة: ${getUnitDisplayName(u)}`, 'success');
+                            }
+                        });
+                        // Merge payments
+                        const localPayments = new Set(state.payments.map(p => p.id));
+                        data.payments?.forEach(p => {
+                            if (!localPayments.has(p.id)) {
+                                state.payments.push(p);
+                                addSyncLog(`➕ تم إضافة دفعة: ${p.id}`, 'success');
+                            }
+                        });
+                        // Merge debts
+                        const localDebts = new Set(state.debts.map(d => d.id));
+                        data.debts?.forEach(d => {
+                            if (!localDebts.has(d.id)) {
+                                state.debts.push(d);
+                                addSyncLog(`➕ تم إضافة مديونية: ${d.reason}`, 'success');
+                            }
+                        });
+                        // Merge expenses
+                        const localExpenses = new Set(state.expenses.map(e => e.id));
+                        data.expenses?.forEach(e => {
+                            if (!localExpenses.has(e.id)) {
+                                state.expenses.push(e);
+                                addSyncLog(`➕ تم إضافة مصروف: ${e.description}`, 'success');
+                            }
+                        });
+                        if (data.settings) {
+                            state.settings = { ...state.settings, ...data.settings };
+                        }
+                        if (data.doorman) {
+                            state.doorman = data.doorman;
+                        }
+                        saveState();
+                        initUI();
+                        addSyncLog('✅ تم جلب البيانات بنجاح من GitHub', 'success');
+                        updateSyncBadge('synced', 'تمت المزامنة بنجاح');
+                        toast('تم جلب البيانات من GitHub');
+                    } catch (err) {
+                        addSyncLog(`❌ فشل الجلب: ${err.message}`, 'error');
+                        updateSyncBadge('error', err.message);
+                        toast(`خطأ في الجلب: ${err.message}`, true);
+                    } finally {
+                        isSyncing = false;
+                    }
+                }
+
+                async function pushToGithub() {
+                    if (isSyncing) { addSyncLog('⚠️ مزامنة جارية بالفعل', 'warning'); return; }
+                    if (!syncConfig.githubToken && !document.getElementById('syncGithubToken').value) {
+                        toast('مطلوب GitHub Token للرفع', true);
+                        addSyncLog('❌ مطلوب GitHub Token للرفع', 'error');
+                        return;
+                    }
+                    const token = syncConfig.githubToken || document.getElementById('syncGithubToken').value;
+                    const repo = syncConfig.repoName || document.getElementById('syncRepoName').value;
+                    const filePath = syncConfig.filePath || document.getElementById('syncFilePath').value || 'data.json';
+                    
+                    if (!repo) {
+                        toast('الرجاء إدخال اسم المستودع (owner/repo)', true);
+                        addSyncLog('❌ اسم المستودع مطلوب', 'error');
+                        return;
+                    }
+
+                    isSyncing = true;
+                    updateSyncBadge('syncing', 'جاري الرفع إلى GitHub...');
+                    addSyncLog('🔄 بدء رفع البيانات إلى GitHub...', 'info');
+
+                    try {
+                        const content = JSON.stringify(state, null, 2);
+                        const encoded = btoa(unescape(encodeURIComponent(content)));
+
+                        // Get current file SHA if exists
+                        let sha = null;
+                        try {
+                            const checkResponse = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+                                headers: { 'Authorization': `token ${token}` }
+                            });
+                            if (checkResponse.ok) {
+                                const fileData = await checkResponse.json();
+                                sha = fileData.sha;
+                            }
+                        } catch (e) {}
+
+                        const payload = {
+                            message: `تحديث بيانات العقار - ${new Date().toLocaleString('ar-EG')}`,
+                            content: encoded,
+                            branch: 'main'
+                        };
+                        if (sha) payload.sha = sha;
+
+                        const response = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `token ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) {
+                            const errData = await response.json();
+                            throw new Error(errData.message || `HTTP ${response.status}`);
+                        }
+
+                        addSyncLog('✅ تم رفع البيانات إلى GitHub بنجاح', 'success');
+                        updateSyncBadge('synced', 'تم الرفع بنجاح');
+                        toast('تم رفع البيانات إلى GitHub');
+                    } catch (err) {
+                        addSyncLog(`❌ فشل الرفع: ${err.message}`, 'error');
+                        updateSyncBadge('error', err.message);
+                        toast(`خطأ في الرفع: ${err.message}`, true);
+                    } finally {
+                        isSyncing = false;
+                    }
+                }
+
+                async function autoSync() {
+                    if (isSyncing) return;
+                    if (!syncConfig.autoSync) return;
+                    try {
+                        await fetchFromGithub();
+                    } catch (e) {
+                        addSyncLog(`⚠️ فشل المزامنة التلقائية: ${e.message}`, 'error');
+                    }
+                }
+
+                function toggleAutoSync() {
+                    syncConfig.autoSync = !syncConfig.autoSync;
+                    if (syncConfig.autoSync) {
+                        autoSyncInterval = setInterval(autoSync, syncConfig.autoSyncInterval || 300000);
+                        addSyncLog('✅ تم تفعيل المزامنة التلقائية (كل 5 دقائق)', 'success');
+                        document.getElementById('btnAutoSyncToggle').textContent = '⏱️ إيقاف المزامنة التلقائية';
+                        toast('تم تفعيل المزامنة التلقائية');
+                        // Do initial sync
+                        setTimeout(autoSync, 2000);
+                    } else {
+                        if (autoSyncInterval) {
+                            clearInterval(autoSyncInterval);
+                            autoSyncInterval = null;
+                        }
+                        addSyncLog('⏸️ تم إيقاف المزامنة التلقائية', 'warning');
+                        document.getElementById('btnAutoSyncToggle').textContent = '⏱️ تفعيل المزامنة التلقائية';
+                        toast('تم إيقاف المزامنة التلقائية');
+                    }
+                    saveSyncConfig();
+                }
+
+                // ---- UI Functions (shortened) ----
+                const SECTION_TITLES = {
+                    dashboard: ['لوحة التحكم', 'نظرة عامة على الوضع المالي'],
+                    units: ['إدارة الوحدات', 'شبكة الأدوار والوحدات'],
+                    elevator: ['شفرات الأسانسير', 'إدارة شفرات المصعد والسكان'],
+                    financial: ['العمليات المالية', 'تحصيل، مصروفات، ومديونيات'],
+                    reports: ['التقارير والطباعة', 'تقارير سنوية وإيصالات'],
+                    settings: ['الإعدادات والنسخ', 'نسخ احتياطي واستعادة']
+                };
+
+                function showSection(name) {
+                    document.querySelectorAll('.section-panel').forEach(el => el.classList.add('hidden'));
+                    const panel = document.getElementById('section-' + name);
+                    if (panel) panel.classList.remove('hidden');
+                    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.toggle('nav-active', btn.dataset.section === name));
+                    const t = SECTION_TITLES[name] || ['', ''];
+                    document.getElementById('pageTitle').textContent = t[0];
+                    document.getElementById('pageSubtitle').textContent = t[1];
+                    if (name === 'dashboard') refreshDashboard();
+                    if (name === 'units') renderUnitsGrid();
+                    if (name === 'elevator') renderElevatorSection();
+                    if (name === 'financial') refreshFinancialSection();
+                    if (name === 'reports') refreshReportsSection();
+                    if (name === 'settings') {
+                        document.getElementById('settingsBuildingName').value = state.settings.buildingName || '';
+                        document.getElementById('syncGithubUrl').value = syncConfig.githubUrl || '';
+                        document.getElementById('syncGithubToken').value = syncConfig.githubToken || '';
+                        document.getElementById('syncRepoName').value = syncConfig.repoName || '';
+                        document.getElementById('syncFilePath').value = syncConfig.filePath || 'data.json';
+                        document.getElementById('btnAutoSyncToggle').textContent = syncConfig.autoSync ? '⏱️ إيقاف المزامنة التلقائية' : '⏱️ تفعيل المزامنة التلقائية';
+                        updateSyncLogDisplay();
+                    }
+                }
+
+                function refreshDashboard() {
+                    const balances = computeFundBalances();
+                    document.getElementById('statCollected').textContent = formatMoney(getTotalCollected());
+                    document.getElementById('statDebts').textContent = formatMoney(getAllOpenDebtTotal());
+                    document.getElementById('statGeneralFund').textContent = formatMoney(balances.general);
+                    document.getElementById('statElevatorFund').textContent = formatMoney(balances.elevator);
+                    const now = new Date();
+                    const m = now.getMonth() + 1, y = now.getFullYear();
+                    let paid = 0, partial = 0, unpaid = 0;
+                    state.units.forEach(u => {
+                        const st = getMonthStatus(u.id, m, y);
+                        if (st === 'paid') paid++;
+                        else if (st === 'partial') partial++;
+                        else unpaid++;
+                    });
+                    document.getElementById('dashboardQuickSummary').innerHTML = [
+                        ['وحدات', state.units.length],
+                        ['مدفوع هذا الشهر', paid],
+                        ['جزئي', partial],
+                        ['غير مدفوع', unpaid]
+                    ].map(([l, v]) => `<div class="bg-slate-50 rounded-xl p-3"><p class="text-slate-500 text-xs">${l}</p><p class="text-xl font-bold">${v}</p></div>`).join('');
+                    renderCharts(balances, m, y);
+                }
+
+                function renderCharts(balances, currentMonth, currentYear) {
+                    const monthsData = [];
+                    for (let i = 5; i >= 0; i--) {
+                        let mm = currentMonth - i, yy = currentYear;
+                        while (mm < 1) { mm += 12; yy--; }
+                        monthsData.push({ month: mm, year: yy, label: MONTHS_AR[mm - 1] });
+                    }
+                    const incomeByMonth = monthsData.map(({ month, year }) =>
+                        state.payments.filter(p => p.month === month && p.year === year).reduce((s, p) => s + p.amount, 0));
+                    const expenseByMonth = monthsData.map(({ month, year }) =>
+                        state.expenses.filter(e => { const d = new Date(e.date); return d.getMonth() + 1 === month && d.getFullYear() === year; })
+                            .reduce((s, e) => s + e.amount, 0));
+                    
+                    const ctx1 = document.getElementById('chartIncomeExpense');
+                    if (chartIncome) chartIncome.destroy();
+                    chartIncome = new Chart(ctx1, {
+                        type: 'bar',
+                        data: {
+                            labels: monthsData.map(m => m.label),
+                            datasets: [
+                                { label: 'دخل', data: incomeByMonth, backgroundColor: 'rgba(16, 185, 129, 0.7)' },
+                                { label: 'مصروف', data: expenseByMonth, backgroundColor: 'rgba(239, 68, 68, 0.7)' }
+                            ]
+                        },
+                        options: { responsive: true, plugins: { legend: { position: 'top' } } }
+                    });
+
+                    let paid = 0, partial = 0, unpaid = 0;
+                    state.units.forEach(u => {
+                        const st = getMonthStatus(u.id, currentMonth, currentYear);
+                        if (st === 'paid') paid++;
+                        else if (st === 'partial') partial++;
+                        else unpaid++;
+                    });
+                    const ctx2 = document.getElementById('chartPaymentStatus');
+                    if (chartStatus) chartStatus.destroy();
+                    chartStatus = new Chart(ctx2, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['مدفوع', 'جزئي', 'غير مدفوع'],
+                            datasets: [{ data: [paid, partial, unpaid], backgroundColor: ['#10b981', '#f59e0b', '#ef4444'] }]
+                        },
+                        options: { responsive: true }
+                    });
+                }
+
+                function getUnitStatusColor(unitId) {
+                    const now = new Date();
+                    const st = getMonthStatus(unitId, now.getMonth() + 1, now.getFullYear());
+                    if (st === 'paid') return 'bg-emerald-100 border-emerald-400 text-emerald-900';
+                    if (st === 'partial') return 'bg-amber-100 border-amber-400 text-amber-900';
+                    return 'bg-red-50 border-red-300 text-red-900';
+                }
+
+                function renderUnitsGrid() {
+                    const container = document.getElementById('unitsGrid');
+                    const sortedUnits = [...state.units].sort((a, b) => (a.floor || 0) - (b.floor || 0));
+                    let html = '<div class="floor-row flex flex-col gap-2">';
+                    sortedUnits.forEach(u => {
+                        const due = getUnitMonthlyDue(u);
+                        const debt = getTotalOpenDebt(u.id);
+                        const emoji = TYPE_EMOJI[u.type] || '🏠';
+                        html += `<button type="button" data-unit-id="${u.id}" class="unit-open flex items-center justify-between w-full text-right p-3 rounded-xl border-2 ${getUnitStatusColor(u.id)}">`;
+                        html += `<div class="flex-1"><div class="font-bold text-sm">${emoji} ${getUnitDisplayName(u)}</div>`;
+                        html += `<div class="text-xs mt-1 opacity-80">${CATEGORY_LABELS[u.category] || ''} • ${formatMoney(due)}</div>`;
+                        if (debt > 0) html += `<div class="text-xs text-red-600 font-medium">⚠️ مديونية: ${formatMoney(debt)}</div>`;
+                        html += `</div><div class="text-xs text-slate-400">الدور ${u.floor || 0}</div></button>`;
+                    });
+                    html += '</div>';
+                    container.innerHTML = html || '<p class="text-slate-500">لا توجد وحدات</p>';
+                    container.querySelectorAll('.unit-open').forEach(btn => btn.addEventListener('click', () => openUnitModal(btn.dataset.unitId)));
+                }
+
+                function escapeHtml(s) {
+                    const d = document.createElement('div');
+                    d.textContent = s;
+                    return d.innerHTML;
+                }
+
+                function renderElevatorSection() {
+                    const tbody = document.getElementById('elevatorCodesBody');
+                    let totalCodes = 0, activeCodes = 0, inactiveCodes = 0, noElev = 0, closed = 0;
+                    let html = '';
+                    let rowNum = 0;
+
+                    function appendRow(u, isDoorman) {
+                        rowNum++;
+                        const uses = isDoorman ? state.doorman.useElevator !== false : unitUsesElevator(u);
+                        const aptSt = isDoorman ? 'موظف' : (u.apartmentStatus === 'closed' ? 'مغلقة' : 'ساكنة');
+                        if (!isDoorman && u.apartmentStatus === 'closed') closed++;
+                        if (!uses && !isDoorman) noElev++;
+                        const codes = isDoorman ? (state.doorman.codes || []) : (u.elevatorCodes || []);
+                        totalCodes += codes.length;
+                        codes.forEach(c => { if (c.status === 'active') activeCodes++; else inactiveCodes++; });
+                        const pill = isDoorman ? 'pill-owner' : (u.category === 'tenant' ? 'pill-tenant' : u.category === 'closed' ? 'pill-closed' : 'pill-owner');
+                        let codesHtml = '';
+                        if (!uses) codesHtml = '<span class="text-slate-400 text-xs">🚫 لا يستخدم المصعد</span>';
+                        else if (!codes.length) codesHtml = '<span class="text-amber-600 text-xs">📭 لا توجد شفرات</span>';
+                        else codes.forEach((c, ci) => {
+                            const cls = c.status === 'active' ? 'code-badge' : 'code-badge inactive';
+                            const uid = isDoorman ? '__doorman__' : u.id;
+                            codesHtml += `<span class="${cls}" data-unit="${uid}" data-ci="${ci}" data-dm="${isDoorman ? '1' : '0'}">${escapeHtml(c.code)}</span><button type="button" class="text-red-500 text-xs btn-del-code" data-unit="${uid}" data-ci="${ci}" data-dm="${isDoorman ? '1' : '0'}">🗑️</button>`;
+                        });
+                        const canAdd = uses && (isDoorman || (u.apartmentStatus !== 'closed' && u.category !== 'closed'));
+                        html += `<tr class="border-b hover:bg-slate-50">
+                            <td class="p-2 text-center">${rowNum}</td>
+                            <td class="p-2">${escapeHtml(isDoorman ? '—' : (u.floorLabel || ''))}</td>
+                            <td class="p-2 font-mono">${escapeHtml(isDoorman ? '—' : getUnitDisplayName(u))}</td>
+                            <td class="p-2">${escapeHtml(isDoorman ? '—' : (u.location || ''))}</td>
+                            <td class="p-2">${escapeHtml(isDoorman ? state.doorman.name : (u.residentName || ''))}</td>
+                            <td class="p-2"><span class="status-pill ${pill}">${aptSt}</span></td>
+                            <td class="p-2">${uses ? '✅' : '🚫'}</td>
+                            <td class="p-2 text-center font-bold">${codes.length}</td>
+                            <td class="p-2">${codesHtml}</td>
+                            <td class="p-2">${!isDoorman ? `<button type="button" class="text-xs bg-amber-100 px-2 py-1 rounded btn-elev-edit" data-id="${u.id}">✏️</button> ` : ''}${canAdd ? `<button type="button" class="text-xs bg-emerald-100 px-2 py-1 rounded btn-elev-add" data-id="${isDoorman ? '__doorman__' : u.id}">➕</button>` : ''}</td>
+                        </tr>`;
+                    }
+
+                    appendRow({ id: '__dm__' }, true);
+                    [...state.units].sort((a, b) => (a.floor || 0) - (b.floor || 0)).forEach(u => appendRow(u, false));
+
+                    tbody.innerHTML = html;
+                    document.getElementById('elevStatUnits').textContent = state.units.length;
+                    document.getElementById('elevStatCodes').textContent = totalCodes;
+                    document.getElementById('elevStatActive').textContent = activeCodes;
+                    document.getElementById('elevStatInactive').textContent = inactiveCodes;
+                    document.getElementById('elevStatNoElev').textContent = noElev;
+                    document.getElementById('elevStatClosed').textContent = closed;
+
+                    tbody.querySelectorAll('.code-badge').forEach(el => {
+                        el.addEventListener('click', () => {
+                            const dm = el.dataset.dm === '1';
+                            const list = dm ? state.doorman.codes : getUnit(el.dataset.unit).elevatorCodes;
+                            const c = list[parseInt(el.dataset.ci, 10)];
+                            c.status = c.status === 'active' ? 'inactive' : 'active';
+                            saveState();
+                            renderElevatorSection();
+                        });
+                    });
+                    tbody.querySelectorAll('.btn-del-code').forEach(el => {
+                        el.addEventListener('click', ev => {
+                            ev.stopPropagation();
+                            if (!confirm('حذف الشفرة؟')) return;
+                            const dm = el.dataset.dm === '1';
+                            const list = dm ? state.doorman.codes : getUnit(el.dataset.unit).elevatorCodes;
+                            list.splice(parseInt(el.dataset.ci, 10), 1);
+                            saveState();
+                            renderElevatorSection();
+                        });
+                    });
+                    tbody.querySelectorAll('.btn-elev-edit').forEach(el => el.addEventListener('click', () => openElevEditModal(el.dataset.id)));
+                    tbody.querySelectorAll('.btn-elev-add').forEach(el => el.addEventListener('click', () => openElevCodeModal(el.dataset.id)));
+                }
+
+                function closeElevModals() {
+                    ['elevEditModal', 'elevCodeModal'].forEach(id => {
+                        document.getElementById(id).classList.add('hidden');
+                        document.getElementById(id).classList.remove('flex');
+                    });
+                }
+
+                function openElevEditModal(unitId) {
+                    const u = getUnit(unitId);
+                    if (!u) return;
+                    document.getElementById('elevEditUnitId').value = unitId;
+                    document.getElementById('elevEditName').value = u.residentName || '';
+                    document.getElementById('elevEditCategory').value = u.category;
+                    document.getElementById('elevEditAptStatus').value = u.apartmentStatus || 'occupied';
+                    document.getElementById('elevEditUseElevator').value = u.useElevator === false ? 'no' : 'yes';
+                    document.getElementById('elevEditModal').classList.remove('hidden');
+                    document.getElementById('elevEditModal').classList.add('flex');
+                }
+
+                function openElevCodeModal(unitId) {
+                    document.getElementById('elevCodeUnitId').value = unitId;
+                    document.getElementById('elevNewCode').value = '';
+                    document.getElementById('elevNewCodeStatus').value = 'active';
+                    document.getElementById('elevCodeModal').classList.remove('hidden');
+                    document.getElementById('elevCodeModal').classList.add('flex');
+                }
+
+                function saveElevEdit() {
+                    const u = getUnit(document.getElementById('elevEditUnitId').value);
+                    if (!u) return;
+                    const useNo = document.getElementById('elevEditUseElevator').value === 'no';
+                    if (useNo && u.elevatorCodes && u.elevatorCodes.length && !confirm('تعطيل المصعد يحذف الشفرات. متابعة؟')) return;
+                    u.residentName = document.getElementById('elevEditName').value.trim();
+                    u.category = document.getElementById('elevEditCategory').value;
+                    u.apartmentStatus = document.getElementById('elevEditAptStatus').value;
+                    u.useElevator = !useNo;
+                    if (useNo || u.category === 'closed') u.elevatorCodes = [];
+                    saveState();
+                    closeElevModals();
+                    renderElevatorSection();
+                    renderUnitsGrid();
+                    toast('تم الحفظ');
+                }
+
+                function saveElevCode() {
+                    const unitId = document.getElementById('elevCodeUnitId').value;
+                    const code = document.getElementById('elevNewCode').value.trim();
+                    const status = document.getElementById('elevNewCodeStatus').value;
+                    if (!code) { toast('أدخل رقم الشفرة', true); return; }
+                    const list = unitId === '__doorman__' ? state.doorman.codes : getUnit(unitId).elevatorCodes;
+                    if (list.some(c => c.code === code)) { toast('موجودة مسبقاً', true); return; }
+                    list.push({ code, status });
+                    saveState();
+                    closeElevModals();
+                    renderElevatorSection();
+                    toast('تمت الإضافة');
+                }
+
+                function openUnitModal(unitId) {
+                    const unit = getUnit(unitId);
+                    if (!unit) return;
+                    document.getElementById('editUnitId').value = unit.id;
+                    document.getElementById('editUnitName').value = unit.name;
+                    document.getElementById('editUnitFloor').value = unit.floor ?? '';
+                    document.getElementById('editUnitType').value = unit.type || 'apartment';
+                    document.getElementById('editUnitCategory').value = unit.category;
+                    document.getElementById('editCustomFee').value = unit.customFee || 0;
+                    if (document.getElementById('editResidentName')) document.getElementById('editResidentName').value = unit.residentName || '';
+                    if (document.getElementById('editAptNum')) document.getElementById('editAptNum').value = unit.aptNum || '';
+                    if (document.getElementById('editLocation')) document.getElementById('editLocation').value = unit.location || '';
+                    if (document.getElementById('editApartmentStatus')) document.getElementById('editApartmentStatus').value = unit.apartmentStatus || 'occupied';
+                    if (document.getElementById('editUseElevator')) {
+                        const v = unit.useElevator === true ? 'yes' : unit.useElevator === false ? 'no' : 'auto';
+                        document.getElementById('editUseElevator').value = v;
+                    }
+                    if (document.getElementById('editUnitNotes')) document.getElementById('editUnitNotes').value = unit.notes || '';
+                    document.getElementById('unitModalTitle').textContent = 'ملف: ' + (unit.residentName || unit.name);
+                    document.getElementById('customFeeWrap').classList.toggle('hidden', unit.category !== 'closed');
+                    updateDuePreview();
+                    const debts = getOpenDebtsForUnit(unitId);
+                    document.getElementById('debtsList').innerHTML = debts.length ?
+                        debts.map(d => `<div class="flex justify-between items-center bg-red-50 p-2 rounded mb-2"><div><strong>${escapeHtml(d.reason)}</strong><br><span class="text-sm">المتبقي: ${formatMoney(d.remaining)} / الأصلي: ${formatMoney(d.originalAmount)}</span></div><button type="button" class="edit-debt-btn bg-primary-500 text-white px-2 py-1 rounded text-xs" data-debt-id="${d.id}">✏️ تعديل</button></div>`).join('') :
+                        '<p class="text-sm text-slate-500">لا توجد مديونيات مفتوحة ✅</p>';
+                    document.querySelectorAll('.edit-debt-btn').forEach(btn => btn.addEventListener('click', () => openEditDebtModal(btn.dataset.debtId)));
+                    const btnDel = document.getElementById('btnDeleteUnit');
+                    btnDel.classList.toggle('hidden', state.units.length <= 1);
+                    document.getElementById('unitModal').classList.remove('hidden');
+                    document.getElementById('unitModal').classList.add('flex');
+                }
+
+                function openEditDebtModal(debtId) {
+                    const debt = state.debts.find(d => d.id === debtId);
+                    if (!debt) return;
+                    document.getElementById('editDebtId').value = debt.id;
+                    document.getElementById('editDebtUnitId').value = debt.unitId;
+                    document.getElementById('editDebtReason').value = debt.reason;
+                    document.getElementById('editDebtRemaining').value = debt.remaining;
+                    document.getElementById('editDebtOriginal').value = debt.originalAmount;
+                    document.getElementById('editDebtModal').classList.remove('hidden');
+                    document.getElementById('editDebtModal').classList.add('flex');
+                }
+
+                function closeUnitModal() {
+                    document.getElementById('unitModal').classList.add('hidden');
+                    document.getElementById('unitModal').classList.remove('flex');
+                }
+
+                function updateDuePreview() {
+                    const cat = document.getElementById('editUnitCategory').value;
+                    const custom = Number(document.getElementById('editCustomFee').value) || 0;
+                    document.getElementById('customFeeWrap').classList.toggle('hidden', cat !== 'closed');
+                    let text = '';
+                    if (cat === 'closed') text = 'الرسوم: ' + formatMoney(custom) + ' (عام فقط)';
+                    else {
+                        const p = PRICING[cat];
+                        text = 'اشتراك شهري: ' + formatMoney(p.total) + ' — عام: ' + p.general + ' | أسانسير: ' + p.elevator;
+                    }
+                    document.getElementById('editUnitDuePreview').textContent = text;
+                }
+
+                function fillUnitSelects() {
+                    const opts = [...state.units].sort((a, b) => (a.floor || 0) - (b.floor || 0))
+                        .map(u => `<option value="${u.id}">${escapeHtml(getUnitDisplayName(u))}</option>`).join('');
+                    ['payUnitId', 'debtUnitId', 'reportUnitId'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.innerHTML = opts;
+                    });
+                }
+
+                function fillMonthSelects() {
+                    const monthOpts = MONTHS_AR.map((name, i) => `<option value="${i + 1}">${name}</option>`).join('');
+                    ['payMonth', 'reportBuildingMonth'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.innerHTML = monthOpts;
+                    });
+                }
+
+                function refreshPayDueHint() {
+                    const unitId = document.getElementById('payUnitId').value;
+                    const month = parseInt(document.getElementById('payMonth').value, 10);
+                    const year = parseInt(document.getElementById('payYear').value, 10);
+                    const unit = getUnit(unitId);
+                    if (!unit) return;
+                    const expected = getExpectedForMonth(unitId, month, year);
+                    const debt = getTotalOpenDebt(unitId);
+                    const paid = getPaidAmountForMonth(unitId, month, year);
+                    const remaining = Math.max(0, expected - paid);
+                    document.getElementById('payDueHint').innerHTML = `المطلوب للشهر: <strong>${formatMoney(expected)}</strong> | محصّل: ${formatMoney(paid)} | متبقي اشتراك: <strong>${formatMoney(remaining)}</strong>` + (debt > 0 ? ` | مديونيات سابقة: <strong>${formatMoney(debt)}</strong>` : '');
+                }
+
+                function refreshFinancialSection() {
+                    fillUnitSelects();
+                    const now = new Date();
+                    document.getElementById('payYear').value = now.getFullYear();
+                    document.getElementById('payMonth').value = now.getMonth() + 1;
+                    document.getElementById('expDate').value = todayISO();
+                    refreshPayDueHint();
+                    renderRecentTransactions();
+                }
+
+                function renderRecentTransactions() {
+                    const rows = [];
+                    state.payments.slice(-15).reverse().forEach(p => {
+                        const u = getUnit(p.unitId);
+                        rows.push({ date: p.date, type: 'دفعة', detail: (u ? getUnitDisplayName(u) : '') + ' — ' + MONTHS_AR[p.month - 1], amount: p.amount, positive: true });
+                    });
+                    state.expenses.slice(-15).reverse().forEach(e => {
+                        rows.push({ date: e.date, type: 'مصروف', detail: e.description + ' (' + (e.fund === 'elevator' ? 'أسانسير' : 'عام') + ')', amount: e.amount, positive: false });
+                    });
+                    rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    document.getElementById('recentTransactionsBody').innerHTML = rows.slice(0, 20).map(r =>
+                        `<tr class="border-b"><td class="p-2">${r.date}</td><td class="p-2">${r.type}</td><td class="p-2">${escapeHtml(r.detail)}</td><td class="p-2 font-medium ${r.positive ? 'text-emerald-600' : 'text-red-600'}">${r.positive ? '+' : '-'}${formatMoney(r.amount)}</td></tr>`
+                    ).join('') || '<tr><td colspan="4" class="p-4 text-slate-500 text-center">لا توجد عمليات بعد</td></tr>';
+                }
+
+                function refreshReportsSection() {
+                    fillUnitSelects();
+                    fillMonthSelects();
+                    const now = new Date();
+                    document.getElementById('reportUnitYear').value = now.getFullYear();
+                    document.getElementById('reportBuildingYear').value = now.getFullYear();
+                    document.getElementById('reportBuildingMonth').value = now.getMonth() + 1;
+                    const bType = document.getElementById('reportBuildingType');
+                    if (bType) document.getElementById('reportBuildingMonth').classList.toggle('hidden', bType.value === 'annual');
+                    const receiptSel = document.getElementById('receiptPaymentId');
+                    receiptSel.innerHTML = state.payments.slice().reverse().slice(0, 100).map(p => {
+                        const u = getUnit(p.unitId);
+                        return `<option value="${p.id}">${p.date} — ${u ? getUnitDisplayName(u) : ''} — ${formatMoney(p.amount)}</option>`;
+                    }).join('') || '<option value="">لا توجد دفعات</option>';
+                }
+
+                // ---- Report functions (unchanged) ----
+                function generateUnitReport(unitId, year) {
+                    const unit = getUnit(unitId);
+                    if (!unit) return '';
+                    const paymentsYear = state.payments.filter(p => p.unitId === unitId && p.year === year);
+                    const totalPaid = paymentsYear.reduce((s, p) => s + p.amount, 0);
+                    let totalRequested = 0;
+                    for (let m = 1; m <= 12; m++) totalRequested += getExpectedForMonth(unitId, m, year);
+                    const debtsYear = state.debts.filter(d => {
+                        if (d.unitId !== unitId) return false;
+                        const created = new Date(d.createdAt);
+                        return created.getFullYear() === year || d.remaining > 0;
+                    });
+                    let matrix = `<table class="w-full text-sm border-collapse mt-4"><thead><tr><th class="border p-2">الشهر</th><th class="border p-2">المطلوب</th><th class="border p-2">المدفوع</th><th class="border p-2">الحالة</th></tr></thead><tbody>`;
+                    for (let m = 1; m <= 12; m++) {
+                        const exp = getExpectedForMonth(unitId, m, year);
+                        const paid = getPaidAmountForMonth(unitId, m, year);
+                        const st = getMonthStatus(unitId, m, year);
+                        const stLabel = st === 'paid' ? '✅ مدفوع' : st === 'partial' ? '⚠️ جزئي' : '❌ غير مدفوع';
+                        matrix += `<tr><td class="border p-2">${MONTHS_AR[m - 1]}</td><td class="border p-2">${formatMoney(exp)}</td><td class="border p-2">${formatMoney(paid)}</td><td class="border p-2">${stLabel}</td></tr>`;
+                    }
+                    matrix += '</tbody></table>';
+                    const debtLog = debtsYear.length ? `<ul class="list-disc mr-6 mt-2">${debtsYear.map(d => `<li>${escapeHtml(d.reason)} — أصل: ${formatMoney(d.originalAmount)} — متبقي: ${formatMoney(d.remaining)}</li>`).join('')}</ul>` : '<p>لا توجد مديونيات مسجلة لهذه السنة.</p>';
+                    const openDebt = getTotalOpenDebt(unitId);
+                    return `<div class="report-document">
+                        <h1 class="text-2xl font-bold mb-2">📄 تقرير الوحدة السنوي</h1>
+                        <p class="text-slate-600">${escapeHtml(state.settings.buildingName)} — سنة ${year}</p>
+                        <hr class="my-4" />
+                        <h2 class="font-bold text-lg">بيانات الوحدة</h2>
+                        <p><strong>الوحدة:</strong> ${escapeHtml(getUnitDisplayName(unit))}</p>
+                        <p><strong>الدور:</strong> ${unit.floor ?? '—'} | <strong>النوع:</strong> ${TYPE_LABELS[unit.type] || ''}</p>
+                        <p><strong>الفئة:</strong> ${CATEGORY_LABELS[unit.category] || ''} | <strong>اشتراك شهري:</strong> ${formatMoney(getUnitMonthlyDue(unit))}</p>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 my-6">
+                            <div class="bg-emerald-50 p-3 rounded"><p class="text-xs">إجمالي المدفوع</p><p class="font-bold">${formatMoney(totalPaid)}</p></div>
+                            <div class="bg-blue-50 p-3 rounded"><p class="text-xs">إجمالي المطلوب</p><p class="font-bold">${formatMoney(totalRequested)}</p></div>
+                            <div class="bg-red-50 p-3 rounded"><p class="text-xs">مديونية متراكمة</p><p class="font-bold">${formatMoney(openDebt)}</p></div>
+                            <div class="bg-slate-50 p-3 rounded"><p class="text-xs">عدد الدفعات</p><p class="font-bold">${paymentsYear.length}</p></div>
+                        </div>
+                        <h2 class="font-bold">مصفوفة الدفع السنوية</h2>
+                        ${matrix}
+                        <h2 class="font-bold mt-6">سجل المديونيات</h2>
+                        ${debtLog}
+                        <h2 class="font-bold mt-6">ملخص</h2>
+                        <p>نسبة التحصيل: ${totalRequested > 0 ? Math.round((totalPaid / totalRequested) * 100) : 100}%</p>
+                        <p class="text-sm text-slate-500 mt-8">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}</p>
+                    </div>`;
+                }
+
+                function generateBuildingReport(month, year) {
+                    const balances = computeFundBalances();
+                    let totalExpected = 0, totalPaid = 0;
+                    let rows = '';
+                    [...state.units].sort((a, b) => (a.floor || 0) - (b.floor || 0)).forEach(u => {
+                        const exp = getExpectedForMonth(u.id, month, year);
+                        const paid = getPaidAmountForMonth(u.id, month, year);
+                        const st = getMonthStatus(u.id, month, year);
+                        totalExpected += exp;
+                        totalPaid += paid;
+                        rows += `<tr><td class="border p-2">${escapeHtml(getUnitDisplayName(u))}</td><td class="border p-2">${formatMoney(exp)}</td><td class="border p-2">${formatMoney(paid)}</td><td class="border p-2">${st === 'paid' ? '✅' : st === 'partial' ? '⚠️' : '❌'}</td><td class="border p-2">${formatMoney(getTotalOpenDebt(u.id))}</td></tr>`;
+                    });
+                    const monthExpenses = state.expenses.filter(e => { const d = new Date(e.date); return d.getMonth() + 1 === month && d.getFullYear() === year; });
+                    const expGeneral = monthExpenses.filter(e => e.fund === 'general').reduce((s, e) => s + e.amount, 0);
+                    const expElevator = monthExpenses.filter(e => e.fund === 'elevator').reduce((s, e) => s + e.amount, 0);
+                    const monthIncome = state.payments.filter(p => p.month === month && p.year === year).reduce((s, p) => s + p.amount, 0);
+                    return `<div class="report-document">
+                        <h1 class="text-2xl font-bold">🏗️ تقرير العمارة الشهري</h1>
+                        <p>${escapeHtml(state.settings.buildingName)} — ${MONTHS_AR[month - 1]} ${year}</p>
+                        <hr class="my-4" />
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div><p>إيراد الشهر: <strong>${formatMoney(monthIncome)}</strong></p>
+                            <p>مصروفات عام: <strong>${formatMoney(expGeneral)}</strong></p></div>
+                            <div><p>مصروفات أسانسير: <strong>${formatMoney(expElevator)}</strong></p>
+                            <p>صافي متوقع تحصيل: <strong>${formatMoney(totalExpected)}</strong> | محصّل: <strong>${formatMoney(totalPaid)}</strong></p></div>
+                        </div>
+                        <h2 class="font-bold">أرصدة الصناديق (حالية)</h2>
+                        <p>صندوق العام: <strong>${formatMoney(balances.general)}</strong> | صندوق الأسانسير: <strong>${formatMoney(balances.elevator)}</strong></p>
+                        <h2 class="font-bold mt-4">حالة الوحدات</h2>
+                        <table class="w-full text-sm border-collapse"><thead><tr><th class="border p-2">الوحدة</th><th class="border p-2">مطلوب</th><th class="border p-2">مدفوع</th><th class="border p-2">حالة</th><th class="border p-2">مديونية</th></tr></thead><tbody>${rows}</tbody></table>
+                        <p class="text-sm mt-8">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}</p>
+                    </div>`;
+                }
+
+                function generateAnnualBuildingReport(year) {
+                    const balances = computeFundBalances();
+                    let totalExpected = 0, totalPaid = 0;
+                    let monthRows = '';
+                    for (let m = 1; m <= 12; m++) {
+                        let expM = 0, paidM = 0;
+                        state.units.forEach(u => {
+                            expM += getExpectedForMonth(u.id, m, year);
+                            paidM += getPaidAmountForMonth(u.id, m, year);
+                        });
+                        totalExpected += expM;
+                        totalPaid += paidM;
+                        monthRows += `<tr><td class="border p-2">${MONTHS_AR[m - 1]}</td><td class="border p-2">${formatMoney(expM)}</td><td class="border p-2">${formatMoney(paidM)}</td></tr>`;
+                    }
+                    const yearIncome = state.payments.filter(p => p.year === year).reduce((s, p) => s + p.amount, 0);
+                    const yearExpenses = state.expenses.filter(e => new Date(e.date).getFullYear() === year);
+                    const expG = yearExpenses.filter(e => e.fund === 'general').reduce((s, e) => s + e.amount, 0);
+                    const expE = yearExpenses.filter(e => e.fund === 'elevator').reduce((s, e) => s + e.amount, 0);
+                    return `<div class="report-document">
+                        <h1 class="text-2xl font-bold">🏗️ تقرير العمارة السنوي</h1>
+                        <p>${escapeHtml(state.settings.buildingName)} — سنة ${year}</p>
+                        <hr class="my-4" />
+                        <p>إيراد السنة: <strong>${formatMoney(yearIncome)}</strong> | مصروفات عام: <strong>${formatMoney(expG)}</strong> | أسانسير: <strong>${formatMoney(expE)}</strong></p>
+                        <p>مطلوب سنوي: <strong>${formatMoney(totalExpected)}</strong> | محصّل: <strong>${formatMoney(totalPaid)}</strong></p>
+                        <p>صندوق العام: <strong>${formatMoney(balances.general)}</strong> | صندوق الأسانسير: <strong>${formatMoney(balances.elevator)}</strong></p>
+                        <table class="w-full text-sm border-collapse mt-4"><thead><tr><th class="border p-2">الشهر</th><th class="border p-2">مطلوب</th><th class="border p-2">محصّل</th></tr></thead><tbody>${monthRows}</tbody></table>
+                        <p class="text-sm mt-8">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}</p>
+                    </div>`;
+                }
+
+                function generateReceipt(paymentId) {
+                    const p = state.payments.find(x => x.id === paymentId);
+                    if (!p) return '<p>دفعة غير موجودة</p>';
+                    const u = getUnit(p.unitId);
+                    const methodLabel = p.method === 'vodafone' ? 'فودافون كاش' : 'كاش';
+                    return `<div class="report-document max-w-md mx-auto border-2 border-dashed border-slate-300 p-8">
+                        <h1 class="text-center text-xl font-bold mb-2">🧾 إيصال تحصيل</h1>
+                        <p class="text-center text-slate-600">${escapeHtml(state.settings.buildingName)}</p>
+                        <hr class="my-4" />
+                        <p><strong>رقم الإيصال:</strong> ${p.id.slice(-8).toUpperCase()}</p>
+                        <p><strong>التاريخ:</strong> ${p.date}</p>
+                        <p><strong>الوحدة:</strong> ${u ? escapeHtml(getUnitDisplayName(u)) : '—'}</p>
+                        <p><strong>عن:</strong> ${MONTHS_AR[p.month - 1]} ${p.year}</p>
+                        <p class="text-2xl font-bold my-4 text-center text-emerald-700">${formatMoney(p.amount)}</p>
+                        <p><strong>طريقة الدفع:</strong> ${methodLabel}</p>
+                        <p class="text-xs text-slate-500">عام: ${formatMoney(p.generalAmount)} | أسانسير: ${formatMoney(p.elevatorAmount)}</p>
+                        ${p.note ? `<p><strong>ملاحظة:</strong> ${escapeHtml(p.note)}</p>` : ''}
+                        <p class="text-center mt-8 text-sm">شكراً لتعاونكم 🙏</p>
+                    </div>`;
+                }
+
+                function exportToExcel() {
+                    const wsData = [
+                        ['اسم العمارة', state.settings.buildingName],
+                        [],
+                        ['تقرير الوحدات'],
+                        ['الوحدة', 'الدور', 'النوع', 'الساكن', 'الفئة', 'الاشتراك الشهري', 'مديونية حالية']
+                    ];
+                    state.units.forEach(u => {
+                        wsData.push([getUnitDisplayName(u), u.floor, TYPE_LABELS[u.type] || 'شقة', u.residentName, CATEGORY_LABELS[u.category] || '', getUnitMonthlyDue(u), getTotalOpenDebt(u.id)]);
+                    });
+                    wsData.push([], ['تقرير المدفوعات'], ['التاريخ', 'الوحدة', 'الشهر', 'السنة', 'المبلغ', 'الطريقة', 'العام', 'الأسانسير']);
+                    state.payments.forEach(p => {
+                        const u = getUnit(p.unitId);
+                        wsData.push([p.date, u ? getUnitDisplayName(u) : '', MONTHS_AR[p.month - 1], p.year, p.amount, p.method === 'vodafone' ? 'فودافون كاش' : 'كاش', p.generalAmount, p.elevatorAmount]);
+                    });
+                    wsData.push([], ['تقرير المصروفات'], ['التاريخ', 'الصندوق', 'التصنيف', 'الوصف', 'المبلغ']);
+                    state.expenses.forEach(e => {
+                        wsData.push([e.date, e.fund === 'general' ? 'عام' : 'أسانسير', e.category, e.description, e.amount]);
+                    });
+                    wsData.push([], ['المديونيات'], ['الوحدة', 'السبب', 'المبلغ الأصلي', 'المتبقي', 'التاريخ']);
+                    state.debts.forEach(d => {
+                        const u = getUnit(d.unitId);
+                        wsData.push([u ? getUnitDisplayName(u) : '', d.reason, d.originalAmount, d.remaining, new Date(d.createdAt).toLocaleDateString('ar-EG')]);
+                    });
+                    const ws = XLSX.utils.aoa_to_sheet(wsData);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'تقرير العقار');
+                    XLSX.writeFile(wb, `تقرير_العقار_${todayISO()}.xlsx`);
+                    toast('تم تصدير Excel');
+                }
+
+                // ---- Event Binding ----
+                function bindEvents() {
+                    document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => showSection(btn.dataset.section)));
+                    document.getElementById('unitModalClose').addEventListener('click', closeUnitModal);
+                    document.getElementById('unitModal').addEventListener('click', e => { if (e.target.id === 'unitModal') closeUnitModal(); });
+                    document.getElementById('editUnitCategory').addEventListener('change', updateDuePreview);
+                    document.getElementById('editCustomFee').addEventListener('input', updateDuePreview);
+                    
+                    document.getElementById('formUnitEdit').addEventListener('submit', e => {
+                        e.preventDefault();
+                        const id = document.getElementById('editUnitId').value;
+                        const unit = getUnit(id);
+                        if (!unit) return;
+                        unit.name = document.getElementById('editUnitName').value.trim();
+                        unit.floor = parseInt(document.getElementById('editUnitFloor').value, 10) || 0;
+                        unit.type = document.getElementById('editUnitType').value;
+                        unit.category = document.getElementById('editUnitCategory').value;
+                        unit.customFee = Number(document.getElementById('editCustomFee').value) || 0;
+                        if (document.getElementById('editResidentName')) unit.residentName = document.getElementById('editResidentName').value.trim();
+                        if (document.getElementById('editAptNum')) unit.aptNum = document.getElementById('editAptNum').value.trim();
+                        if (document.getElementById('editLocation')) unit.location = document.getElementById('editLocation').value.trim();
+                        if (document.getElementById('editApartmentStatus')) unit.apartmentStatus = document.getElementById('editApartmentStatus').value;
+                        if (document.getElementById('editUnitNotes')) unit.notes = document.getElementById('editUnitNotes').value.trim();
+                        const ue = document.getElementById('editUseElevator');
+                        if (ue) unit.useElevator = ue.value === 'auto' ? null : ue.value === 'yes';
+                        saveState();
+                        closeUnitModal();
+                        renderUnitsGrid();
+                        toast('تم حفظ بيانات الوحدة');
+                    });
+
+                    document.getElementById('elevEditSave').addEventListener('click', saveElevEdit);
+                    document.getElementById('elevEditCancel').addEventListener('click', closeElevModals);
+                    document.getElementById('elevCodeSave').addEventListener('click', saveElevCode);
+                    document.getElementById('elevCodeCancel').addEventListener('click', closeElevModals);
+
+                    document.getElementById('btnDeleteUnit').addEventListener('click', () => {
+                        if (!confirm('حذف الوحدة؟ لن تُحذف سجلّات الدفع التاريخية.')) return;
+                        const id = document.getElementById('editUnitId').value;
+                        state.units = state.units.filter(u => u.id !== id);
+                        saveState();
+                        closeUnitModal();
+                        renderUnitsGrid();
+                        toast('تم حذف الوحدة');
+                    });
+
+                    document.getElementById('btnAddUnit').addEventListener('click', () => {
+                        document.getElementById('addUnitModal').classList.remove('hidden');
+                        document.getElementById('addUnitModal').classList.add('flex');
+                    });
+
+                    document.getElementById('addUnitModalClose').addEventListener('click', () => {
+                        document.getElementById('addUnitModal').classList.add('hidden');
+                        document.getElementById('addUnitModal').classList.remove('flex');
+                    });
+
+                    document.getElementById('formAddUnit').addEventListener('submit', e => {
+                        e.preventDefault();
+                        const maxOrder = Math.max(0, ...state.units.map(u => u.sortOrder || 0));
+                        state.units.push({
+                            id: uid(), name: document.getElementById('newUnitName').value.trim(),
+                            floor: parseInt(document.getElementById('newUnitFloor').value, 10) || 0,
+                            type: document.getElementById('newUnitType').value,
+                            category: document.getElementById('newUnitCategory').value,
+                            customFee: 0, sortOrder: maxOrder + 1
+                        });
+                        saveState();
+                        document.getElementById('addUnitModal').classList.add('hidden');
+                        document.getElementById('addUnitModal').classList.remove('flex');
+                        document.getElementById('formAddUnit').reset();
+                        renderUnitsGrid();
+                        toast('تمت إضافة الوحدة');
+                    });
+
+                    ['payUnitId', 'payMonth', 'payYear'].forEach(id => document.getElementById(id).addEventListener('change', refreshPayDueHint));
+
+                    document.getElementById('formPayment').addEventListener('submit', e => {
+                        e.preventDefault();
+                        try {
+                            processPayment({
+                                unitId: document.getElementById('payUnitId').value,
+                                month: parseInt(document.getElementById('payMonth').value, 10),
+                                year: parseInt(document.getElementById('payYear').value, 10),
+                                amount: parseFloat(document.getElementById('payAmount').value),
+                                method: document.getElementById('payMethod').value,
+                                note: document.getElementById('payNote').value.trim(),
+                                date: todayISO()
+                            });
+                            toast('تم تسجيل الدفعة بنجاح');
+                            document.getElementById('payAmount').value = '';
+                            refreshFinancialSection();
+                        } catch (err) {
+                            toast(err.message || 'خطأ', true);
+                        }
+                    });
+
+                    document.getElementById('formExpense').addEventListener('submit', e => {
+                        e.preventDefault();
+                        const fund = document.getElementById('expFund').value;
+                        const amount = parseFloat(document.getElementById('expAmount').value);
+                        const balances = computeFundBalances();
+                        const avail = fund === 'general' ? balances.general : balances.elevator;
+                        if (amount > avail + 0.01 && !confirm('المبلغ أكبر من رصيد الصندوق (' + formatMoney(avail) + '). المتابعة؟')) return;
+                        state.expenses.push({
+                            id: uid(), fund, category: document.getElementById('expCategory').value,
+                            amount, date: document.getElementById('expDate').value,
+                            description: document.getElementById('expDescription').value.trim(),
+                            createdAt: new Date().toISOString()
+                        });
+                        saveState();
+                        document.getElementById('formExpense').reset();
+                        document.getElementById('expDate').value = todayISO();
+                        toast('تم تسجيل المصروف');
+                        refreshFinancialSection();
+                        refreshDashboard();
+                    });
+
+                    document.getElementById('expFund').addEventListener('change', function() {
+                        const cat = document.getElementById('expCategory');
+                        if (this.value === 'elevator') cat.value = 'elevator_contract';
+                    });
+
+                    document.getElementById('formManualDebt').addEventListener('submit', e => {
+                        e.preventDefault();
+                        addDebt(document.getElementById('debtUnitId').value, parseFloat(document.getElementById('debtAmount').value), document.getElementById('debtReason').value.trim());
+                        saveState();
+                        document.getElementById('formManualDebt').reset();
+                        toast('تمت إضافة المديونية');
+                    });
+
+                    document.getElementById('formElevatorLevy').addEventListener('submit', e => {
+                        e.preventDefault();
+                        const perUnit = parseFloat(document.getElementById('levyPerUnit').value);
+                        const desc = document.getElementById('levyDescription').value.trim();
+                        const now = new Date();
+                        const month = now.getMonth() + 1;
+                        const year = now.getFullYear();
+                        state.levies.push({ id: uid(), perUnit, description: desc, month, year, createdAt: new Date().toISOString() });
+                        let count = 0;
+                        state.units.forEach(u => {
+                            if (unitUsesElevator(u)) {
+                                addDebt(u.id, perUnit, 'رسوم طوارئ أسانسير: ' + desc, { type: 'elevator_levy', levyMonth: month, levyYear: year });
+                                count++;
+                            }
+                        });
+                        saveState();
+                        document.getElementById('formElevatorLevy').reset();
+                        toast('تم فرض الرسوم على ' + count + ' وحدة');
+                    });
+
+                    document.getElementById('btnUnitReport').addEventListener('click', () => {
+                        const html = generateUnitReport(document.getElementById('reportUnitId').value, parseInt(document.getElementById('reportUnitYear').value, 10));
+                        document.getElementById('reportOutput').innerHTML = html;
+                        showSection('reports');
+                    });
+
+                    document.getElementById('btnBuildingReport').addEventListener('click', () => {
+                        const year = parseInt(document.getElementById('reportBuildingYear').value, 10);
+                        const type = document.getElementById('reportBuildingType').value;
+                        const html = type === 'annual' ? generateAnnualBuildingReport(year) : generateBuildingReport(parseInt(document.getElementById('reportBuildingMonth').value, 10), year);
+                        document.getElementById('reportOutput').innerHTML = html;
+                        showSection('reports');
+                    });
+
+                    document.getElementById('reportBuildingType').addEventListener('change', function() {
+                        document.getElementById('reportBuildingMonth').classList.toggle('hidden', this.value === 'annual');
+                    });
+
+                    document.getElementById('btnPrintReceipt').addEventListener('click', () => {
+                        const id = document.getElementById('receiptPaymentId').value;
+                        document.getElementById('reportOutput').innerHTML = generateReceipt(id);
+                        setTimeout(() => window.print(), 300);
+                    });
+
+                    document.getElementById('btnSaveSettings').addEventListener('click', () => {
+                        state.settings.buildingName = document.getElementById('settingsBuildingName').value.trim() || 'عمارة سكنية';
+                        saveState();
+                        document.getElementById('buildingNameSidebar').textContent = state.settings.buildingName;
+                        toast('تم الحفظ');
+                    });
+
+                    document.getElementById('btnExportJson').addEventListener('click', () => {
+                        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = 'backup-building-' + todayISO() + '.json';
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                        toast('تم التصدير');
+                    });
+
+                    document.getElementById('btnExportExcel').addEventListener('click', () => exportToExcel());
+                    document.getElementById('btnExportExcelBackup').addEventListener('click', () => exportToExcel());
+
+                    document.getElementById('btnExportPDFReport').addEventListener('click', () => {
+                        if (!document.getElementById('reportOutput').innerHTML.trim()) {
+                            toast('اعرض التقرير أولاً', true);
+                            return;
+                        }
+                        setTimeout(() => window.print(), 200);
+                    });
+
+                    document.getElementById('importJsonFile').addEventListener('change', e => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            try {
+                                const data = JSON.parse(reader.result);
+                                if (!data.units || !Array.isArray(data.units)) throw new Error('ملف غير صالح');
+                                state = data;
+                                saveState();
+                                initUI();
+                                toast('تم الاستيراد بنجاح');
+                            } catch (err) {
+                                toast('فشل الاستيراد: ' + err.message, true);
+                            }
+                        };
+                        reader.readAsText(file);
+                        e.target.value = '';
+                    });
+
+                    document.getElementById('btnResetData').addEventListener('click', () => {
+                        if (!confirm('سيتم استبدال كل البيانات ببيانات يناير 2026. متأكد؟')) return;
+                        state = createProductionState();
+                        saveState();
+                        initUI();
+                        toast('تم تحميل بيانات يناير 2026');
+                    });
+
+                    document.getElementById('editDebtSave').addEventListener('click', () => {
+                        const debtId = document.getElementById('editDebtId').value;
+                        const newRemaining = parseFloat(document.getElementById('editDebtRemaining').value);
+                        const newOriginal = parseFloat(document.getElementById('editDebtOriginal').value);
+                        const newReason = document.getElementById('editDebtReason').value.trim();
+                        if (updateDebt(debtId, newRemaining, newOriginal, newReason)) {
+                            toast('تم تحديث المديونية');
+                            document.getElementById('editDebtModal').classList.add('hidden');
+                            openUnitModal(document.getElementById('editDebtUnitId').value);
+                            renderUnitsGrid();
+                        } else toast('حدث خطأ', true);
+                    });
+
+                    document.getElementById('editDebtDelete').addEventListener('click', () => {
+                        if (!confirm('حذف المديونية نهائياً؟')) return;
+                        const debtId = document.getElementById('editDebtId').value;
+                        const unitId = document.getElementById('editDebtUnitId').value;
+                        deleteDebt(debtId);
+                        toast('تم حذف المديونية');
+                        document.getElementById('editDebtModal').classList.add('hidden');
+                        openUnitModal(unitId);
+                        renderUnitsGrid();
+                    });
+
+                    document.getElementById('editDebtCancel').addEventListener('click', () => {
+                        document.getElementById('editDebtModal').classList.add('hidden');
+                        document.getElementById('editDebtModal').classList.remove('flex');
+                    });
+
+                    // ---- Sync Events ----
+                    document.getElementById('btnSaveSyncSettings').addEventListener('click', () => {
+                        syncConfig.githubUrl = document.getElementById('syncGithubUrl').value.trim();
+                        syncConfig.githubToken = document.getElementById('syncGithubToken').value.trim();
+                        syncConfig.repoName = document.getElementById('syncRepoName').value.trim();
+                        syncConfig.filePath = document.getElementById('syncFilePath').value.trim() || 'data.json';
+                        saveSyncConfig();
+                        addSyncLog('✅ تم حفظ إعدادات المزامنة', 'success');
+                        toast('تم حفظ إعدادات المزامنة');
+                    });
+
+                    document.getElementById('btnFetchFromGithub').addEventListener('click', fetchFromGithub);
+                    document.getElementById('btnPushToGithub').addEventListener('click', pushToGithub);
+
+                    document.getElementById('btnSyncNow').addEventListener('click', async () => {
+                        await fetchFromGithub();
+                    });
+
+                    document.getElementById('btnAutoSyncToggle').addEventListener('click', toggleAutoSync);
+
+                    // Close modals on outside click
+                    document.querySelectorAll('.fixed.inset-0').forEach(modal => {
+                        modal.addEventListener('click', e => {
+                            if (e.target === modal) {
+                                modal.classList.add('hidden');
+                                modal.classList.remove('flex');
+                            }
+                        });
+                    });
+                }
+
+                function initUI() {
+                    document.getElementById('buildingNameSidebar').textContent = state.settings.buildingName || 'عمارة سكنية';
+                    document.getElementById('currentDateDisplay').textContent = new Date().toLocaleDateString('ar-EG', {
+                        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+                    });
+                    fillMonthSelects();
+                    fillUnitSelects();
+                    refreshDashboard();
+                    // Restore auto-sync state
+                    if (syncConfig.autoSync) {
+                        document.getElementById('btnAutoSyncToggle').textContent = '⏱️ إيقاف المزامنة التلقائية';
+                        autoSyncInterval = setInterval(autoSync, syncConfig.autoSyncInterval || 300000);
+                        // Do initial sync after a delay
+                        setTimeout(autoSync, 3000);
+                    }
+                    updateSyncLogDisplay();
+                }
+
+                function init() {
+                    ensureState();
+                    bindEvents();
+                    initUI();
+                    showSection('dashboard');
+                    addSyncLog('🚀 تم تشغيل النظام - الإصدار 2.0 مع مزامنة GitHub', 'info');
+                    updateSyncBadge('ready', 'جاهز للمزامنة');
+                }
+
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+                else init();
+            })();
+        </script>
+    </body>
+</html>
